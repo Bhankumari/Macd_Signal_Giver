@@ -1,0 +1,18 @@
+services:
+  - type: worker
+    name: macd-signal-worker
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python worker.py
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+      - key: GIT_USER_EMAIL
+        value: macd-signal-bot@render.com
+      - key: GIT_USER_NAME
+        value: MACD Signal Bot
+      - key: GITHUB_USERNAME
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false 
