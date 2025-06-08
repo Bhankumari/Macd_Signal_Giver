@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import asyncio
 import aiohttp
+import os
 
 class BotTelegramSender:
     def __init__(self, bot_token, chat_ids):
@@ -243,12 +244,13 @@ async def main():
             return
     
     # Use today's date for testing
-   #signal_date = datetime.today().strftime('%Y-%m-%d')  # Format: 'YYYY-MM-DD'
-    signal_date = "2025-05-26"  # Uncomment to use a specific date
+    signal_date = datetime.today().strftime('%Y-%m-%d')  # Format: 'YYYY-MM-DD'
+    # signal_date = "2025-05-31"  # Uncomment to use a specific date
 
-    tg_bot_token = "7213295742:AAH8APqwSoXe-t0bElF9L_-ZOpebm2DTAM8"
-    # Using the chat ID we found from the test script
-    tg_group_chat_ids = ["6595074511"]  # This is the chat ID we found
+    # Get credentials from environment variables (for GitHub Actions) or use defaults for local testing
+    tg_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "7213295742:AAH8APqwSoXe-t0bElF9L_-ZOpebm2DTAM8")
+    tg_group_chat_ids_str = os.getenv("TELEGRAM_CHAT_IDS", "6595074511")
+    tg_group_chat_ids = [chat_id.strip() for chat_id in tg_group_chat_ids_str.split(",")]
 
     base_url = "https://www.sharesansar.com/company/nhpc"
     headers = {
@@ -278,8 +280,8 @@ async def main():
         company_symbol = company["symbol"].replace('/', '-')
 
         # Fetch and update price history!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       # new_data = price_history(headers, company_id)
-        #update_csv(company_symbol, new_data)
+        new_data = price_history(headers, company_id)
+        update_csv(company_symbol, new_data)
 
         # Detect MACD signal code from here
         file_path = f"data/{company_symbol}.csv"

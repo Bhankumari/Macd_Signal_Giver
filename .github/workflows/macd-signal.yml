@@ -1,0 +1,47 @@
+name: MACD Signal Daily Runner
+
+on:
+  schedule:
+    # Runs every day at 3:20 PM UTC (15:20 in 24-hour format)
+    # If you want 3:20 PM in a different timezone, adjust accordingly:
+    # For example, for Nepal Time (UTC+5:45), use '20 09 * * *' for 3:20 PM local time
+    - cron: '20 15 * * *'
+  
+  # Allow manual triggering of the workflow
+  workflow_dispatch:
+
+jobs:
+  run-macd-signal:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create data directory
+      run: mkdir -p data
+    
+    - name: Run MACD Signal Script
+      env:
+        # Add your Telegram bot token as a GitHub secret
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+      run: python main.py
+    
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add -A
+        git diff --staged --quiet || git commit -m "Update stock data - $(date)"
+        git push 
