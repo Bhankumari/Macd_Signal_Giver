@@ -244,8 +244,8 @@ async def main():
             return
     
     # Use today's date for testing
-    # signal_date = datetime.today().strftime('%Y-%m-%d')  # Format: 'YYYY-MM-DD'
-    signal_date = "2025-06-08"  # Uncomment to use a specific date
+    signal_date = datetime.today().strftime('%Y-%m-%d')  # Format: 'YYYY-MM-DD'
+    # signal_date = "2025-06-08"  # Uncomment to use a specific date
 
     # Get credentials from environment variables (for GitHub Actions) or use defaults for local testing
     tg_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "7213295742:AAH8APqwSoXe-t0bElF9L_-ZOpebm2DTAM8")

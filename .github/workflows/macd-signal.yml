@@ -2,10 +2,10 @@ name: MACD Signal Daily Runner
 
 on:
   schedule:
-    # Runs every day at 11:15 AM UTC for testing
-    # If you want 11:15 AM in a different timezone, adjust accordingly:
-    # For example, for Nepal Time (UTC+5:45), use '30 05 * * *' for 11:15 AM local time
-    - cron: '15 11 * * *'
+    # Test: Runs every 5 minutes for testing (remove this after testing)
+    - cron: '*/5 * * * *'
+    # Uncomment below for daily at 11:15 AM UTC after testing
+    # - cron: '15 11 * * *'
   
   # Allow manual triggering of the workflow
   workflow_dispatch:
