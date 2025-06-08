@@ -29,6 +29,220 @@ class BotTelegramSender:
                     else:
                         print(f"Message sent successfully to chat {chat_id}")
 
+class PortfolioMACDAnalyzer:
+    def __init__(self, tg_bot_token=None, tg_group_chat_ids=None):
+        self.my_stocks = ['GBIME', 'GMFIL', 'HBL', 'ICFC', 'JBLB', 'JFL', 'UPPER']
+        self.portfolio_data = []
+        self.macd_signals = {}
+        self.tg_bot_token = tg_bot_token
+        self.tg_group_chat_ids = tg_group_chat_ids
+        
+    def load_portfolio_from_csv(self, filename='my_portfolio.csv'):
+        """Load portfolio data from CSV file"""
+        try:
+            df = pd.read_csv(filename)
+            return df
+        except FileNotFoundError:
+            print(f"Portfolio file {filename} not found!")
+            return None
+    
+    async def analyze_portfolio_macd_signals(self):
+        """Analyze MACD signals for all stocks in portfolio"""
+        signal_date = datetime.today().strftime('%Y-%m-%d')
+        
+        print(f"\n🔍 Analyzing Portfolio MACD signals for {signal_date}...")
+        print("=" * 60)
+        
+        portfolio_signals_found = []
+        
+        for stock_symbol in self.my_stocks:
+            try:
+                file_path = f"data/{stock_symbol}.csv"
+                
+                if not os.path.exists(file_path):
+                    print(f"⚠️  No data file found for {stock_symbol}")
+                    self.macd_signals[stock_symbol] = "No Data"
+                    continue
+                
+                # Load and process data
+                data = pd.read_csv(file_path)
+                data.columns = [col.lower() for col in data.columns]
+                data = data[['published_date', 'close']]
+                data['published_date'] = pd.to_datetime(data['published_date'])
+                data['close'] = pd.to_numeric(data['close'], errors='coerce')
+                data = data.dropna(subset=['close'])
+                data = data.sort_values(by='published_date')
+                
+                if len(data) < 26:  # Need at least 26 data points for MACD
+                    print(f"⚠️  Insufficient data for {stock_symbol} (need 26+ points, have {len(data)})")
+                    self.macd_signals[stock_symbol] = "Insufficient Data"
+                    continue
+                
+                # Calculate MACD
+                macd_data = calculate_macd(data)
+                
+                # Check for recent crossovers (last 5 days)
+                recent_signals = self.detect_recent_crossovers(macd_data, stock_symbol)
+                self.macd_signals[stock_symbol] = recent_signals
+                
+                # If signals found, add to portfolio signals list
+                if isinstance(recent_signals, list) and len(recent_signals) > 0:
+                    for signal in recent_signals:
+                        portfolio_signals_found.append({
+                            'stock': stock_symbol,
+                            'signal': signal
+                        })
+                
+            except Exception as e:
+                print(f"❌ Error analyzing {stock_symbol}: {str(e)}")
+                self.macd_signals[stock_symbol] = "Error"
+        
+        # Send Telegram messages for portfolio signals
+        if portfolio_signals_found and self.tg_bot_token and self.tg_group_chat_ids:
+            await self.send_portfolio_telegram_messages(portfolio_signals_found)
+    
+    async def send_portfolio_telegram_messages(self, portfolio_signals):
+        """Send Telegram messages for portfolio stocks with MACD signals"""
+        for signal_info in portfolio_signals:
+            stock = signal_info['stock']
+            signal = signal_info['signal']
+            signal_type = signal['type']
+            date = signal['date'].strftime('%Y-%m-%d')
+            
+            # Create message for user's portfolio stocks
+            if signal_type == 'BUY':
+                message = f"🟢 Your Stock Alert: {stock} - BUY SIGNAL detected on {date}\nMACD: {signal['macd']} | Signal Line: {signal['signal']}\n📈 Consider reviewing your position!"
+            else:
+                message = f"🔴 Your Stock Alert: {stock} - SELL SIGNAL detected on {date}\nMACD: {signal['macd']} | Signal Line: {signal['signal']}\n📉 Consider reviewing your position!"
+            
+            print(f"📱 Sending portfolio alert for {stock}...")
+            await send_messages_with_bot(self.tg_bot_token, self.tg_group_chat_ids, message)
+
+    def detect_recent_crossovers(self, data, stock_symbol, days_back=5):
+        """Detect MACD crossovers in recent days"""
+        signals = []
+        
+        # Get recent data (last 'days_back' days)
+        recent_data = data.tail(days_back)
+        
+        for i in range(1, len(recent_data)):
+            current_idx = recent_data.index[i]
+            prev_idx = recent_data.index[i-1]
+            
+            macd_current = recent_data.loc[current_idx, 'macd']
+            signal_current = recent_data.loc[current_idx, 'signal']
+            macd_prev = recent_data.loc[prev_idx, 'macd']
+            signal_prev = recent_data.loc[prev_idx, 'signal']
+            date_current = recent_data.loc[current_idx, 'published_date']
+            
+            # Check for crossovers
+            if (macd_current > signal_current and macd_prev <= signal_prev):
+                signals.append({
+                    'type': 'BUY',
+                    'date': date_current,
+                    'macd': round(macd_current, 4),
+                    'signal': round(signal_current, 4)
+                })
+            elif (macd_current < signal_current and macd_prev >= signal_prev):
+                signals.append({
+                    'type': 'SELL',
+                    'date': date_current,
+                    'macd': round(macd_current, 4),
+                    'signal': round(signal_current, 4)
+                })
+        
+        return signals if signals else "No Recent Signals"
+    
+    def display_portfolio_analysis(self):
+        """Display portfolio analysis with MACD highlights"""
+        print("\n" + "="*80)
+        print("📊 PORTFOLIO MACD ANALYSIS REPORT")
+        print("="*80)
+        
+        # Load portfolio data
+        portfolio_df = self.load_portfolio_from_csv()
+        
+        if portfolio_df is None:
+            print("❌ Could not load portfolio data!")
+            return
+        
+        highlighted_stocks = []
+        
+        for index, row in portfolio_df.iterrows():
+            stock = row['Symbol']
+            balance = row['Current_Balance'] if pd.notna(row['Current_Balance']) else 0
+            ltp = row['Last_Transaction_Price'] if pd.notna(row['Last_Transaction_Price']) else 0
+            value_ltp = row['Value_LTP'] if pd.notna(row['Value_LTP']) else 0
+            
+            print(f"\n📈 {stock}")
+            print(f"   Balance: {balance} | LTP: {ltp} | Value: {value_ltp}")
+            
+            # Check MACD signals
+            if stock in self.macd_signals:
+                signals = self.macd_signals[stock]
+                
+                if isinstance(signals, list) and len(signals) > 0:
+                    print("   🚨 MACD SIGNALS DETECTED:")
+                    highlighted_stocks.append(stock)
+                    
+                    for signal in signals:
+                        signal_type = signal['type']
+                        date = signal['date'].strftime('%Y-%m-%d')
+                        
+                        if signal_type == 'BUY':
+                            print(f"   🟢 BUY SIGNAL on {date}")
+                        else:
+                            print(f"   🔴 SELL SIGNAL on {date}")
+                        
+                        print(f"      MACD: {signal['macd']} | Signal Line: {signal['signal']}")
+                    
+                elif signals == "No Recent Signals":
+                    print("   ⚪ No recent MACD signals")
+                else:
+                    print(f"   ⚠️  {signals}")
+            else:
+                print("   ❓ MACD analysis not available")
+        
+        # Summary
+        print("\n" + "="*80)
+        print("📋 SUMMARY")
+        print("="*80)
+        
+        if highlighted_stocks:
+            print(f"🚨 STOCKS WITH MACD SIGNALS: {', '.join(highlighted_stocks)}")
+            print("   👆 These stocks have recent MACD crossovers - consider reviewing!")
+        else:
+            print("✅ No recent MACD crossover signals detected in your portfolio")
+        
+        print(f"📊 Total stocks analyzed: {len(self.my_stocks)}")
+        print(f"💼 Portfolio symbols: {', '.join(self.my_stocks)}")
+    
+    def update_csv_with_signals(self):
+        """Update the portfolio CSV with MACD signal status"""
+        try:
+            df = pd.read_csv('my_portfolio.csv')
+            
+            for index, row in df.iterrows():
+                stock = row['Symbol']
+                if stock in self.macd_signals:
+                    signals = self.macd_signals[stock]
+                    
+                    if isinstance(signals, list) and len(signals) > 0:
+                        # Get the most recent signal
+                        latest_signal = signals[-1]
+                        status = f"{latest_signal['type']} Signal ({latest_signal['date'].strftime('%m/%d')})"
+                        df.at[index, 'MACD_Status'] = status
+                    elif signals == "No Recent Signals":
+                        df.at[index, 'MACD_Status'] = "No Signals"
+                    else:
+                        df.at[index, 'MACD_Status'] = str(signals)
+            
+            df.to_csv('my_portfolio.csv', index=False)
+            print("\n✅ Portfolio CSV updated with MACD signals!")
+            
+        except Exception as e:
+            print(f"❌ Error updating CSV: {str(e)}")
+
 def fetch_cookies_and_csrf_token(url, headers):
     """Fetch cookies and CSRF token from the given URL."""
     response = requests.get(url, headers=headers)
@@ -266,6 +480,11 @@ async def main():
     cookies, csrf_token = fetch_cookies_and_csrf_token(base_url, headers)
     headers = update_headers(headers, cookies, csrf_token)
 
+    print("🚀 Starting MACD Signal Analysis...")
+    print("="*60)
+    print("PHASE 1: General Stock Analysis")
+    print("="*60)
+
     # Load stock symbols from CSV
     with open("stock_list.csv", "r", encoding="utf-8") as file:
         reader = csv.reader(file)
@@ -310,6 +529,26 @@ async def main():
 
         # Detect intersections and print signals
         await detect_intersections(macd_data, company_symbol, signal_date, tg_bot_token, tg_group_chat_ids)
+
+    print("\n" + "="*60)
+    print("PHASE 2: Personal Portfolio Analysis")
+    print("="*60)
+    
+    # Initialize and run portfolio analysis with Telegram credentials
+    portfolio_analyzer = PortfolioMACDAnalyzer(tg_bot_token, tg_group_chat_ids)
+    
+    # Analyze MACD signals for portfolio (now async)
+    await portfolio_analyzer.analyze_portfolio_macd_signals()
+    
+    # Display detailed portfolio analysis
+    portfolio_analyzer.display_portfolio_analysis()
+    
+    # Update CSV file with signals
+    portfolio_analyzer.update_csv_with_signals()
+    
+    print("\n🎉 Analysis Complete!")
+    print("Check your 'my_portfolio.csv' file for updated MACD signals!")
+    print("📱 Portfolio alerts sent to Telegram if signals detected!")
 
 if __name__ == "__main__":
     asyncio.run(main())
