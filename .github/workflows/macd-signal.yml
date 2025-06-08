@@ -3,7 +3,7 @@ name: MACD Signal Daily Runner
 on:
   schedule:
     # Runs every day at 11:35 AM UTC
-    - cron: '35 11 * * *'
+    - cron: '40 11 * * *'
   
   # Allow manual triggering of the workflow
   workflow_dispatch:
