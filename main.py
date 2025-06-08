@@ -7,6 +7,7 @@ from datetime import datetime
 import asyncio
 import aiohttp
 import os
+from typing import Dict, List, Any
 
 class BotTelegramSender:
     def __init__(self, bot_token, chat_ids):
@@ -242,6 +243,178 @@ class PortfolioMACDAnalyzer:
             
         except Exception as e:
             print(f"❌ Error updating CSV: {str(e)}")
+
+class IPOChecker:
+    def __init__(self, tg_bot_token=None, tg_group_chat_ids=None):
+        self.tg_bot_token = tg_bot_token
+        self.tg_group_chat_ids = tg_group_chat_ids
+    
+    def fetch_ipo_data(self) -> Dict[str, Any]:
+        """
+        Fetch IPO data from Nepali Paisa API
+        Returns the JSON response from the API
+        """
+        url = "https://nepalipaisa.com/api/GetIpos"
+        
+        # Parameters from the curl command
+        params = {
+            'stockSymbol': '',
+            'pageNo': 1,
+            'itemsPerPage': 10,
+            'pagePerDisplay': 5,
+            '_': int(datetime.now().timestamp() * 1000)  # current timestamp
+        }
+        
+        # Headers from the curl command
+        headers = {
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Language': 'en-US,en;q=0.9,ne;q=0.8',
+            'Connection': 'keep-alive',
+            'Content-Type': 'application/json; charset=utf-8',
+            'Referer': 'https://nepalipaisa.com/ipo',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+            'X-Requested-With': 'XMLHttpRequest',
+            'sec-ch-ua': '"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"macOS"'
+        }
+        
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching IPO data: {e}")
+            return {}
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON response: {e}")
+            return {}
+
+    def is_ipo_open(self, ipo: Dict[str, Any]) -> bool:
+        """
+        Check if an IPO is currently open for application
+        This function checks various status fields to determine if IPO is open
+        """
+        # Check the status field directly
+        if 'status' in ipo:
+            status = str(ipo['status']).lower()
+            if 'open' in status:
+                return True
+            elif any(keyword in status for keyword in ['closed', 'end', 'completed', 'finished']):
+                return False
+        
+        # Check date-based opening/closing using the actual API field names
+        current_date = datetime.now()
+        
+        open_date = None
+        close_date = None
+        
+        # Parse opening date
+        if 'openingDateAD' in ipo and ipo['openingDateAD']:
+            try:
+                open_date = datetime.strptime(ipo['openingDateAD'], '%Y-%m-%d')
+            except (ValueError, TypeError):
+                pass
+        
+        # Parse closing date
+        if 'closingDateAD' in ipo and ipo['closingDateAD']:
+            try:
+                close_date = datetime.strptime(ipo['closingDateAD'], '%Y-%m-%d')
+            except (ValueError, TypeError):
+                pass
+        
+        # If we have both dates, check if current date is between them
+        if open_date and close_date:
+            return open_date <= current_date <= close_date
+        
+        # If no clear indicators, return False (better to be conservative)
+        return False
+
+    def format_ipo_for_telegram(self, ipo: Dict[str, Any]) -> str:
+        """
+        Format IPO details for Telegram message
+        """
+        message = f"🎯 <b>Open IPO Alert!</b>\n\n"
+        message += f"🏢 <b>Company:</b> {ipo.get('companyName', 'Unknown Company')}\n"
+        message += f"📈 <b>Symbol:</b> {ipo.get('stockSymbol', 'N/A')}\n"
+        message += f"🏭 <b>Sector:</b> {ipo.get('sectorName', 'N/A')}\n"
+        message += f"💰 <b>Price per Unit:</b> Rs. {ipo.get('pricePerUnit', 'N/A')}\n"
+        message += f"📊 <b>Min Units:</b> {ipo.get('minUnits', 'N/A')}\n"
+        message += f"📊 <b>Max Units:</b> {ipo.get('maxUnits', 'N/A')}\n"
+        message += f"💼 <b>Total Amount:</b> Rs. {ipo.get('totalAmount', 'N/A')}\n"
+        message += f"📅 <b>Opens:</b> {ipo.get('openingDateAD', 'N/A')}\n"
+        message += f"📅 <b>Closes:</b> {ipo.get('closingDateAD', 'N/A')}\n"
+        message += f"🏛️ <b>Registrar:</b> {ipo.get('shareRegistrar', 'N/A')}\n"
+        if ipo.get('rating'):
+            message += f"⭐ <b>Rating:</b> {ipo.get('rating')}\n"
+        message += f"\n💡 <i>Don't miss this investment opportunity!</i>"
+        
+        return message
+
+    async def check_and_notify_ipos(self):
+        """
+        Check for open IPOs and send Telegram notifications
+        """
+        print("\n🔍 Checking for open IPOs...")
+        print("=" * 60)
+        
+        data = self.fetch_ipo_data()
+        
+        if not data:
+            print("❌ Failed to fetch IPO data or received empty response.")
+            return
+        
+        # Parse IPO data from API response
+        ipos = []
+        if isinstance(data, dict):
+            if 'result' in data and isinstance(data['result'], dict) and 'data' in data['result']:
+                ipos = data['result']['data'] if isinstance(data['result']['data'], list) else []
+            elif 'data' in data:
+                ipos = data['data'] if isinstance(data['data'], list) else [data['data']]
+            elif 'ipos' in data:
+                ipos = data['ipos'] if isinstance(data['ipos'], list) else [data['ipos']]
+            else:
+                ipos = [data]
+        elif isinstance(data, list):
+            ipos = data
+        
+        if not ipos:
+            print("❌ No IPO data found in the response.")
+            return
+        
+        # Filter for open IPOs
+        open_ipos = [ipo for ipo in ipos if self.is_ipo_open(ipo)]
+        
+        if open_ipos:
+            print(f"🎯 Found {len(open_ipos)} open IPO(s)!")
+            
+            # Send Telegram notifications for each open IPO
+            if self.tg_bot_token and self.tg_group_chat_ids:
+                for ipo in open_ipos:
+                    message = self.format_ipo_for_telegram(ipo)
+                    print(f"📱 Sending IPO alert for {ipo.get('companyName', 'Unknown')}...")
+                    await send_messages_with_bot(self.tg_bot_token, self.tg_group_chat_ids, message)
+            
+            # Display details in console
+            for i, ipo in enumerate(open_ipos, 1):
+                print(f"\n📋 Open IPO #{i}:")
+                print(f"   Company: {ipo.get('companyName', 'Unknown')}")
+                print(f"   Symbol: {ipo.get('stockSymbol', 'N/A')}")
+                print(f"   Price: Rs. {ipo.get('pricePerUnit', 'N/A')}")
+                print(f"   Closes: {ipo.get('closingDateAD', 'N/A')}")
+                
+        else:
+            print("✅ No open IPOs found at the moment.")
+            print(f"📊 Total IPOs checked: {len(ipos)}")
+            
+            # Show recent IPOs for reference
+            if ipos:
+                print("\n📋 Recent IPOs:")
+                for i, ipo in enumerate(ipos[:3], 1):
+                    print(f"   {i}. {ipo.get('companyName', 'Unknown')} ({ipo.get('stockSymbol', 'N/A')}): {ipo.get('status', 'Status unknown')}")
 
 def fetch_cookies_and_csrf_token(url, headers):
     """Fetch cookies and CSRF token from the given URL."""
@@ -546,9 +719,20 @@ async def main():
     # Update CSV file with signals
     portfolio_analyzer.update_csv_with_signals()
     
-    print("\n🎉 Analysis Complete!")
-    print("Check your 'my_portfolio.csv' file for updated MACD signals!")
+    print("\n" + "="*60)
+    print("PHASE 3: IPO Opportunity Check")
+    print("="*60)
+    
+    # Initialize and run IPO checker
+    ipo_checker = IPOChecker(tg_bot_token, tg_group_chat_ids)
+    
+    # Check for open IPOs and send notifications
+    await ipo_checker.check_and_notify_ipos()
+    
+    print("\n🎉 Complete Analysis Finished!")
+    print("✅ MACD signals analyzed and updated in 'my_portfolio.csv'")
     print("📱 Portfolio alerts sent to Telegram if signals detected!")
+    print("🎯 IPO opportunities checked and notified if available!")
 
 if __name__ == "__main__":
     asyncio.run(main())
