@@ -209,7 +209,7 @@ async def main():
     find_group_id_mode = False
     
     if find_group_id_mode:
-        bot_token = "7213295742:AAH8APqwSoXe-t0bElF9L_-ZOpebm2DTAM8"
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
         url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
         
         try:
@@ -248,8 +248,8 @@ async def main():
     # signal_date = "2025-06-08"  # Uncomment to use a specific date
 
     # Get credentials from environment variables (for GitHub Actions) or use defaults for local testing
-    tg_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "7213295742:AAH8APqwSoXe-t0bElF9L_-ZOpebm2DTAM8")
-    tg_group_chat_ids_str = os.getenv("TELEGRAM_CHAT_IDS", "6595074511")
+    tg_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+    tg_group_chat_ids_str = os.getenv("TELEGRAM_CHAT_IDS", "YOUR_CHAT_ID_HERE")
     tg_group_chat_ids = [chat_id.strip() for chat_id in tg_group_chat_ids_str.split(",")]
 
     base_url = "https://www.sharesansar.com/company/nhpc"

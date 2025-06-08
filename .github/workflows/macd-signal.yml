@@ -2,8 +2,8 @@ name: MACD Signal Daily Runner
 
 on:
   schedule:
-    # Test: Runs every 5 minutes for testing (remove this after testing)
-    - cron: '*/5 * * * *'
+    # Test: Runs every minute for testing (change back to daily after testing)
+    - cron: '* * * * *'
     # Uncomment below for daily at 11:15 AM UTC after testing
     # - cron: '15 11 * * *'
   
