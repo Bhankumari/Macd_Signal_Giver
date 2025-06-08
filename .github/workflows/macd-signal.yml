@@ -5,7 +5,7 @@ on:
     # Runs every day at 3:20 PM UTC (15:20 in 24-hour format)
     # If you want 3:20 PM in a different timezone, adjust accordingly:
     # For example, for Nepal Time (UTC+5:45), use '20 09 * * *' for 3:20 PM local time
-    - cron: '20 15 * * *'
+    - cron: '55 10 * * *'
   
   # Allow manual triggering of the workflow
   workflow_dispatch:
