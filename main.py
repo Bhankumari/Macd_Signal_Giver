@@ -629,10 +629,10 @@ async def main():
         except Exception as e:
             print(f"Error finding group ID: {str(e)}")
             return
+
     
-    # Use today's date for testing
-    # signal_date = datetime.today().strftime('%Y-%m-%d')  # Format: 'YYYY-MM-DD'
-    signal_date = "2025-06-08"  # Uncomment to use a specific date
+    signal_date = datetime.today().strftime('%Y-%m-%d')  # Format: 'YYYY-MM-DD'
+    # signal_date = "2025-06-08"  # Uncomment to use a specific date
 
     # Get credentials from environment variables (for GitHub Actions) or use defaults for local testing
     tg_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
