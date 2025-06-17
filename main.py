@@ -31,12 +31,13 @@ class BotTelegramSender:
                         print(f"Message sent successfully to chat {chat_id}")
 
 class PortfolioMACDAnalyzer:
-    def __init__(self, tg_bot_token=None, tg_group_chat_ids=None):
-        self.my_stocks = ['GBIME', 'RURU', 'HBL', 'ICFC', 'JBLB', 'JFL', 'UPPER','TVCL','BHDC']
+    def __init__(self, tg_bot_token=None, tg_group_chat_ids=None, tg_personal_chat_ids=None):
+        self.my_stocks = ['GBIME', 'RURU', 'HBL', 'ICFC', 'JBLB', 'JFL', 'UPPER']
         self.portfolio_data = []
         self.macd_signals = {}
         self.tg_bot_token = tg_bot_token
         self.tg_group_chat_ids = tg_group_chat_ids
+        self.tg_personal_chat_ids = tg_personal_chat_ids
         
     def load_portfolio_from_csv(self, filename='my_portfolio.csv'):
         """Load portfolio data from CSV file"""
@@ -98,8 +99,8 @@ class PortfolioMACDAnalyzer:
                 print(f"❌ Error analyzing {stock_symbol}: {str(e)}")
                 self.macd_signals[stock_symbol] = "Error"
         
-        # Send Telegram messages for portfolio signals
-        if portfolio_signals_found and self.tg_bot_token and self.tg_group_chat_ids:
+        # Send Telegram messages for portfolio signals (only to personal chats)
+        if portfolio_signals_found and self.tg_bot_token and self.tg_personal_chat_ids:
             await self.send_portfolio_telegram_messages(portfolio_signals_found)
     
     async def send_portfolio_telegram_messages(self, portfolio_signals):
@@ -117,7 +118,7 @@ class PortfolioMACDAnalyzer:
                 message = f"🔴 Your Stock Alert: {stock} - SELL SIGNAL detected on {date}\nMACD: {signal['macd']} | Signal Line: {signal['signal']}\n📉 Consider reviewing your position!"
             
             print(f"📱 Sending portfolio alert for {stock}...")
-            await send_messages_with_bot(self.tg_bot_token, self.tg_group_chat_ids, message)
+            await send_messages_with_bot(self.tg_bot_token, self.tg_personal_chat_ids, message)
 
     def detect_recent_crossovers(self, data, stock_symbol, days_back=5):
         """Detect MACD crossovers in recent days"""
@@ -245,9 +246,10 @@ class PortfolioMACDAnalyzer:
             print(f"❌ Error updating CSV: {str(e)}")
 
 class IPOChecker:
-    def __init__(self, tg_bot_token=None, tg_group_chat_ids=None):
+    def __init__(self, tg_bot_token=None, tg_group_chat_ids=None, tg_personal_chat_ids=None):
         self.tg_bot_token = tg_bot_token
         self.tg_group_chat_ids = tg_group_chat_ids
+        self.tg_personal_chat_ids = tg_personal_chat_ids
     
     def fetch_ipo_data(self) -> Dict[str, Any]:
         """
@@ -391,12 +393,13 @@ class IPOChecker:
         if open_ipos:
             print(f"🎯 Found {len(open_ipos)} open IPO(s)!")
             
-            # Send Telegram notifications for each open IPO
-            if self.tg_bot_token and self.tg_group_chat_ids:
+            # Send Telegram notifications for each open IPO (to all chats - both group and personal)
+            if self.tg_bot_token and (self.tg_group_chat_ids or self.tg_personal_chat_ids):
+                all_chat_ids = (self.tg_group_chat_ids or []) + (self.tg_personal_chat_ids or [])
                 for ipo in open_ipos:
                     message = self.format_ipo_for_telegram(ipo)
                     print(f"📱 Sending IPO alert for {ipo.get('companyName', 'Unknown')}...")
-                    await send_messages_with_bot(self.tg_bot_token, self.tg_group_chat_ids, message)
+                    await send_messages_with_bot(self.tg_bot_token, all_chat_ids, message)
             
             # Display details in console
             for i, ipo in enumerate(open_ipos, 1):
@@ -636,8 +639,17 @@ async def main():
 
     # Get credentials from environment variables (for GitHub Actions) or use defaults for local testing
     tg_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-    tg_group_chat_ids_str = os.getenv("TELEGRAM_CHAT_IDS", "YOUR_CHAT_ID_HERE")
+    
+    # Group chat IDs (for general stock signals, no personal portfolio alerts)
+    tg_group_chat_ids_str = os.getenv("TELEGRAM_GROUP_CHAT_IDS", "-1002500595333")
     tg_group_chat_ids = [chat_id.strip() for chat_id in tg_group_chat_ids_str.split(",")]
+    
+    # Personal chat IDs (for all alerts including personal portfolio)
+    tg_personal_chat_ids_str = os.getenv("TELEGRAM_PERSONAL_CHAT_IDS", "6595074511")
+    tg_personal_chat_ids = [chat_id.strip() for chat_id in tg_personal_chat_ids_str.split(",")]
+    
+    # Combined chat IDs for general stock signals (both group and personal)
+    tg_all_chat_ids = tg_group_chat_ids + tg_personal_chat_ids
 
     base_url = "https://www.sharesansar.com/company/nhpc"
     headers = {
@@ -700,15 +712,15 @@ async def main():
         # Calculate MACD and Signal line
         macd_data = calculate_macd(data)
 
-        # Detect intersections and print signals
-        await detect_intersections(macd_data, company_symbol, signal_date, tg_bot_token, tg_group_chat_ids)
+        # Detect intersections and print signals (send to all chats - both group and personal)
+        await detect_intersections(macd_data, company_symbol, signal_date, tg_bot_token, tg_all_chat_ids)
 
     print("\n" + "="*60)
     print("PHASE 2: Personal Portfolio Analysis")
     print("="*60)
     
     # Initialize and run portfolio analysis with Telegram credentials
-    portfolio_analyzer = PortfolioMACDAnalyzer(tg_bot_token, tg_group_chat_ids)
+    portfolio_analyzer = PortfolioMACDAnalyzer(tg_bot_token, tg_group_chat_ids, tg_personal_chat_ids)
     
     # Analyze MACD signals for portfolio (now async)
     await portfolio_analyzer.analyze_portfolio_macd_signals()
@@ -724,7 +736,7 @@ async def main():
     print("="*60)
     
     # Initialize and run IPO checker
-    ipo_checker = IPOChecker(tg_bot_token, tg_group_chat_ids)
+    ipo_checker = IPOChecker(tg_bot_token, tg_group_chat_ids, tg_personal_chat_ids)
     
     # Check for open IPOs and send notifications
     await ipo_checker.check_and_notify_ipos()

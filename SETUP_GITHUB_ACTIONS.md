@@ -19,8 +19,13 @@ You need to add your sensitive credentials as GitHub Secrets:
 - **Name:** `TELEGRAM_BOT_TOKEN`
   **Value:** Your Telegram bot token (e.g., `7213295742:AAH8APqwSoXe-t0bElF9L_-ZOpebm2DTAM8`)
 
-- **Name:** `TELEGRAM_CHAT_IDS`  
-  **Value:** Your Telegram chat IDs, comma-separated if multiple (e.g., `6595074511` or `6595074511,1234567890`)
+- **Name:** `TELEGRAM_GROUP_CHAT_IDS`  
+  **Value:** Your group chat ID (e.g., `-1002500595333`)
+  **Description:** Group chat that receives general stock signals and IPO alerts (NO personal portfolio alerts)
+
+- **Name:** `TELEGRAM_PERSONAL_CHAT_IDS`  
+  **Value:** Your personal chat ID (e.g., `6595074511`)
+  **Description:** Personal chat that receives ALL alerts including personal portfolio notifications
 
 ### 3. Configure Schedule Timezone
 The workflow is currently set to run at **3:20 PM UTC** daily.
@@ -53,11 +58,13 @@ To test the workflow immediately:
 ## How it Works
 
 The GitHub Action will:
-1. **Run daily at 3:20 PM UTC** (or your configured time)
+1. **Run daily at 11:40 AM UTC** (or your configured time)
 2. **Fetch latest stock data** from sharesansar.com
 3. **Calculate MACD indicators** for all stocks in your list
 4. **Detect buy/sell signals** for the current date
-5. **Send Telegram notifications** for any signals found
+5. **Send Telegram notifications** with smart routing:
+   - **Group Chat**: General stock signals + IPO alerts (NO personal portfolio)
+   - **Personal Chat**: General stock signals + Personal portfolio alerts + IPO alerts
 6. **Update CSV files** with new data
 7. **Commit and push** updated data back to the repository
 

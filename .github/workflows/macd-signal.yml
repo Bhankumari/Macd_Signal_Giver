@@ -37,7 +37,10 @@ jobs:
       env:
         # Add your Telegram bot token as a GitHub secret
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+        # Group chat IDs (general signals only, no personal portfolio alerts)
+        TELEGRAM_GROUP_CHAT_IDS: ${{ secrets.TELEGRAM_GROUP_CHAT_IDS }}
+        # Personal chat IDs (all alerts including personal portfolio)
+        TELEGRAM_PERSONAL_CHAT_IDS: ${{ secrets.TELEGRAM_PERSONAL_CHAT_IDS }}
       run: python main.py
     
     - name: Commit and push changes
