@@ -8,7 +8,8 @@ import asyncio
 import aiohttp
 import os
 from typing import Dict, List, Any
-from enhanced_indicators import SignalAnalyzer, format_telegram_message
+from enhanced_indicators import SignalAnalyzer
+from message_formats import format_short_message
 
 class BotTelegramSender:
     def __init__(self, bot_token, chat_ids):
@@ -149,8 +150,8 @@ class PortfolioMACDAnalyzer:
             # Create portfolio-specific message header
             portfolio_header = f"💼 <b>YOUR PORTFOLIO ALERT</b>\n"
             
-            # Format comprehensive message
-            telegram_message = format_telegram_message(analysis)
+            # Format SHORT message
+            telegram_message = format_short_message(analysis)
             
             # Add portfolio header
             final_message = portfolio_header + telegram_message
@@ -611,8 +612,8 @@ async def detect_comprehensive_signals(data, company_symbol, signal_date, tg_bot
             icon = '✅' if details['signal'] == 'BUY' else '❌' if details['signal'] == 'SELL' else '➖'
             print(f"{icon} {indicator}: {details['reason']}")
         
-        # Format comprehensive Telegram message
-        telegram_message = format_telegram_message(analysis)
+        # Format SHORT Telegram message
+        telegram_message = format_short_message(analysis)
         
         # Send comprehensive signal to Telegram
         await send_messages_with_bot(tg_bot_token, tg_group_chat_ids, telegram_message)
