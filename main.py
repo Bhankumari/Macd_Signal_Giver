@@ -360,12 +360,64 @@ class PortfolioMACDAnalyzer:
                 print(f"❌ Error checking RSI for {stock_symbol}: {str(e)}")
                 self.rsi_alerts[stock_symbol] = "Error"
         
-        # Send Telegram alerts for oversold/overbought stocks
-        if rsi_alerts and self.tg_bot_token and self.tg_personal_chat_ids:
-            await self.send_rsi_telegram_alerts(rsi_alerts)
+        # Always send RSI status for all portfolio stocks to personal chat
+        if self.tg_bot_token and self.tg_personal_chat_ids:
+            await self.send_portfolio_rsi_status()
+    
+    async def send_portfolio_rsi_status(self):
+        """Always send RSI status for ALL portfolio stocks to personal chat"""
+        if not self.rsi_alerts:
+            return
+        
+        # Create comprehensive RSI status message for all stocks
+        message_lines = ["📊 YOUR PORTFOLIO RSI STATUS", "=" * 25]
+        
+        oversold_count = 0
+        overbought_count = 0
+        neutral_count = 0
+        
+        for stock_symbol in self.my_stocks:
+            if stock_symbol in self.rsi_alerts and isinstance(self.rsi_alerts[stock_symbol], dict):
+                rsi_info = self.rsi_alerts[stock_symbol]
+                rsi = rsi_info['rsi']
+                price = rsi_info['price']
+                status = rsi_info['status']
+                
+                if status == 'OVERSOLD':
+                    emoji = "🟢"
+                    oversold_count += 1
+                    message_lines.append(f"{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}")
+                    message_lines.append(f"   Price: {price:.2f}")
+                    message_lines.append("   💡 Potential BUY opportunity")
+                elif status == 'OVERBOUGHT':
+                    emoji = "🔴"
+                    overbought_count += 1
+                    message_lines.append(f"{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}")
+                    message_lines.append(f"   Price: {price:.2f}")
+                    message_lines.append("   💡 Consider taking profits")
+                else:
+                    emoji = "⚪"
+                    neutral_count += 1
+                    message_lines.append(f"{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}")
+                    message_lines.append(f"   Price: {price:.2f}")
+                
+                message_lines.append("")
+        
+        # Add summary
+        message_lines.append("📊 SUMMARY:")
+        message_lines.append(f"🟢 Oversold: {oversold_count}")
+        message_lines.append(f"🔴 Overbought: {overbought_count}")
+        message_lines.append(f"⚪ Neutral: {neutral_count}")
+        message_lines.append("")
+        message_lines.append("⚠️ Always do your own research before trading!")
+        
+        message = "\n".join(message_lines)
+        
+        print(f"📱 Sending complete portfolio RSI status to personal chat...")
+        await send_messages_with_bot(self.tg_bot_token, self.tg_personal_chat_ids, message)
     
     async def send_rsi_telegram_alerts(self, rsi_alerts):
-        """Send Telegram alerts for RSI oversold/overbought conditions"""
+        """Send Telegram alerts for RSI oversold/overbought conditions (legacy function)"""
         if not rsi_alerts:
             return
         
