@@ -92,20 +92,18 @@ class SignalAnalyzer:
         self.indicators = TechnicalIndicators()
     
     def analyze_all_signals(self, data: pd.DataFrame, symbol: str) -> Dict[str, Any]:
-        """Analyze all technical indicators and generate comprehensive signals"""
+        """Analyze MACD and RSI indicators only for simplified signal generation"""
         
-        if len(data) < 200:  # Need sufficient data for all indicators
+        if len(data) < 50:  # Need sufficient data for MACD and RSI
             return {
                 'symbol': symbol,
                 'signal': 'INSUFFICIENT_DATA',
                 'strength': 0,
-                'details': 'Need at least 200 data points for comprehensive analysis'
+                'details': 'Need at least 50 data points for MACD and RSI analysis'
             }
         
-        # Calculate all indicators
+        # Calculate only MACD and RSI indicators
         rsi = self.indicators.calculate_rsi(data)
-        bollinger = self.indicators.calculate_bollinger_bands(data)
-        moving_averages = self.indicators.calculate_moving_averages(data)
         macd_data = self.indicators.calculate_macd(data)
         support_resistance = self.indicators.find_support_resistance(data)
         
@@ -124,11 +122,9 @@ class SignalAnalyzer:
         prev_macd = macd_data['macd'].iloc[prev_idx]
         prev_signal = macd_data['signal'].iloc[prev_idx]
         
-        # Analyze each indicator
-        signals = self._analyze_individual_signals(
-            data, rsi, bollinger, moving_averages, macd_data, support_resistance,
-            current_price, prev_price, current_rsi, prev_rsi,
-            current_macd, current_signal, prev_macd, prev_signal
+        # Analyze only MACD and RSI indicators
+        signals = self._analyze_macd_rsi_only(
+            current_rsi, prev_rsi, current_macd, current_signal, prev_macd, prev_signal
         )
         
         # Calculate overall signal strength
@@ -138,8 +134,8 @@ class SignalAnalyzer:
         
         total_signals = len(signals)
         
-        # Determine overall signal
-        overall_signal, signal_strength = self._determine_overall_signal(
+        # Determine overall signal (simplified for 2 indicators)
+        overall_signal, signal_strength = self._determine_macd_rsi_signal(
             buy_score, sell_score, neutral_score, total_signals
         )
         
@@ -165,10 +161,8 @@ class SignalAnalyzer:
             'risk_reward_ratio': round((target_price - current_price) / abs(current_price - stop_loss), 2) if stop_loss != current_price else 0
         }
     
-    def _analyze_individual_signals(self, data, rsi, bollinger, moving_averages, macd_data, support_resistance,
-                                  current_price, prev_price, current_rsi, prev_rsi,
-                                  current_macd, current_signal, prev_macd, prev_signal):
-        """Analyze each individual indicator"""
+    def _analyze_macd_rsi_only(self, current_rsi, prev_rsi, current_macd, current_signal, prev_macd, prev_signal):
+        """Analyze only MACD and RSI indicators"""
         
         signals = {}
         
@@ -192,80 +186,25 @@ class SignalAnalyzer:
         else:
             signals['RSI'] = {'signal': 'NEUTRAL', 'reason': f'RSI neutral ({round(current_rsi, 1)})'}
         
-        # 3. Moving Average Analysis
-        ma20 = moving_averages['ma_20'].iloc[-1]
-        ma50 = moving_averages['ma_50'].iloc[-1]
-        
-        if current_price > ma20 > ma50:
-            signals['MA_Trend'] = {'signal': 'BUY', 'reason': 'Price above MA20 above MA50 (bullish trend)'}
-        elif current_price < ma20 < ma50:
-            signals['MA_Trend'] = {'signal': 'SELL', 'reason': 'Price below MA20 below MA50 (bearish trend)'}
-        else:
-            signals['MA_Trend'] = {'signal': 'NEUTRAL', 'reason': 'Mixed moving average signals'}
-        
-        # 4. Moving Average Crossover
-        prev_ma20 = moving_averages['ma_20'].iloc[-2]
-        prev_ma50 = moving_averages['ma_50'].iloc[-2]
-        
-        if ma20 > ma50 and prev_ma20 <= prev_ma50:
-            signals['MA_Crossover'] = {'signal': 'BUY', 'reason': 'MA20 crossed above MA50'}
-        elif ma20 < ma50 and prev_ma20 >= prev_ma50:
-            signals['MA_Crossover'] = {'signal': 'SELL', 'reason': 'MA20 crossed below MA50'}
-        else:
-            signals['MA_Crossover'] = {'signal': 'NEUTRAL', 'reason': 'No MA crossover'}
-        
-        # 5. Bollinger Bands Analysis
-        upper_band = bollinger['upper_band'].iloc[-1]
-        lower_band = bollinger['lower_band'].iloc[-1]
-        middle_band = bollinger['middle_band'].iloc[-1]
-        
-        if current_price <= lower_band:
-            signals['Bollinger'] = {'signal': 'BUY', 'reason': 'Price at/below lower Bollinger band'}
-        elif current_price >= upper_band:
-            signals['Bollinger'] = {'signal': 'SELL', 'reason': 'Price at/above upper Bollinger band'}
-        elif current_price > middle_band:
-            signals['Bollinger'] = {'signal': 'BUY', 'reason': 'Price above BB middle line'}
-        elif current_price < middle_band:
-            signals['Bollinger'] = {'signal': 'SELL', 'reason': 'Price below BB middle line'}
-        else:
-            signals['Bollinger'] = {'signal': 'NEUTRAL', 'reason': 'Price near BB middle'}
-        
-        # 6. Support/Resistance Analysis
-        support = support_resistance['support']
-        resistance = support_resistance['resistance']
-        
-        if current_price > prev_price and current_price > resistance * 0.99:
-            signals['Support_Resistance'] = {'signal': 'BUY', 'reason': 'Breaking above resistance'}
-        elif current_price < prev_price and current_price < support * 1.01:
-            signals['Support_Resistance'] = {'signal': 'SELL', 'reason': 'Breaking below support'}
-        elif abs(current_price - support) / support < 0.02:  # Within 2% of support
-            signals['Support_Resistance'] = {'signal': 'BUY', 'reason': 'Near support level'}
-        elif abs(current_price - resistance) / resistance < 0.02:  # Within 2% of resistance
-            signals['Support_Resistance'] = {'signal': 'SELL', 'reason': 'Near resistance level'}
-        else:
-            signals['Support_Resistance'] = {'signal': 'NEUTRAL', 'reason': 'Between support and resistance'}
-        
         return signals
     
-    def _determine_overall_signal(self, buy_score, sell_score, neutral_score, total_signals):
-        """Determine overall signal based on individual signals"""
+    def _determine_macd_rsi_signal(self, buy_score, sell_score, neutral_score, total_signals):
+        """Determine overall signal based on MACD and RSI only (2 indicators)"""
         
         buy_percentage = (buy_score / total_signals) * 100
         sell_percentage = (sell_score / total_signals) * 100
         
-        if buy_score >= 4:  # Strong buy (4 or more buy signals)
+        if buy_score == 2:  # Both MACD and RSI are BUY
             return 'STRONG_BUY', buy_percentage
-        elif buy_score >= 3:  # Moderate buy (3 buy signals)
+        elif buy_score == 1 and sell_score == 0:  # One BUY, one NEUTRAL
             return 'BUY', buy_percentage
-        elif sell_score >= 4:  # Strong sell (4 or more sell signals)
+        elif sell_score == 2:  # Both MACD and RSI are SELL
             return 'STRONG_SELL', sell_percentage
-        elif sell_score >= 3:  # Moderate sell (3 sell signals)
+        elif sell_score == 1 and buy_score == 0:  # One SELL, one NEUTRAL
             return 'SELL', sell_percentage
-        elif buy_score > sell_score:
-            return 'WEAK_BUY', buy_percentage
-        elif sell_score > buy_score:
-            return 'WEAK_SELL', sell_percentage
-        else:
+        elif buy_score == 1 and sell_score == 1:  # One BUY, one SELL - conflicting signals
+            return 'NEUTRAL', 50.0
+        else:  # Both NEUTRAL
             return 'NEUTRAL', max(buy_percentage, sell_percentage)
     
     def _calculate_stop_loss_and_target(self, current_price, signal, support_resistance):

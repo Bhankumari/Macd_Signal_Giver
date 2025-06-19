@@ -1,14 +1,15 @@
-# 🔧 Bot Configuration Settings
+# 🔧 Bot Configuration Settings - MACD & RSI Only
 
 # MESSAGE FORMAT SETTINGS
 # Choose your preferred message format:
 # Options: 'short', 'medium', 'detailed'
 MESSAGE_FORMAT = 'short'  # Change this to 'medium' or 'detailed' for longer messages
 
-# SIGNAL THRESHOLD SETTINGS
-# Minimum number of indicators needed for BUY/SELL signals
-MIN_BUY_SIGNALS = 3    # Default: 3 (out of 6 indicators)
-MIN_SELL_SIGNALS = 3   # Default: 3 (out of 6 indicators)
+# SIGNAL THRESHOLD SETTINGS (Now using only MACD and RSI - 2 indicators total)
+# Signal strength based on both indicators agreeing:
+# - STRONG_BUY/SELL: Both MACD and RSI signal same direction
+# - BUY/SELL: One indicator signals, other neutral
+# - NEUTRAL: Mixed or neutral signals
 
 # RISK MANAGEMENT SETTINGS
 DEFAULT_STOP_LOSS_PERCENT = 5    # Default: 5% stop loss
@@ -31,32 +32,29 @@ BB_STD_DEV = 2         # Default: 2 standard deviations
 SEND_ONLY_STRONG_SIGNALS = False  # Set to True to only send STRONG_BUY/STRONG_SELL
 INCLUDE_PORTFOLIO_HEADER = True   # Add "YOUR PORTFOLIO ALERT" header for personal stocks
 
-# QUICK PRESETS
+# QUICK PRESETS (Updated for MACD & RSI only)
 PRESETS = {
     'conservative': {
         'MESSAGE_FORMAT': 'short',
-        'MIN_BUY_SIGNALS': 4,
-        'MIN_SELL_SIGNALS': 4,
-        'SEND_ONLY_STRONG_SIGNALS': True
+        'SEND_ONLY_STRONG_SIGNALS': True,    # Only when both MACD and RSI agree
+        'DESCRIPTION': 'Only strong signals when both indicators agree'
     },
     'balanced': {
         'MESSAGE_FORMAT': 'medium',
-        'MIN_BUY_SIGNALS': 3,
-        'MIN_SELL_SIGNALS': 3,
-        'SEND_ONLY_STRONG_SIGNALS': False
+        'SEND_ONLY_STRONG_SIGNALS': False,   # Include single indicator signals
+        'DESCRIPTION': 'All signals including single indicator alerts'
     },
     'aggressive': {
         'MESSAGE_FORMAT': 'detailed',
-        'MIN_BUY_SIGNALS': 2,
-        'MIN_SELL_SIGNALS': 2,
-        'SEND_ONLY_STRONG_SIGNALS': False
+        'SEND_ONLY_STRONG_SIGNALS': False,   # All signals with full analysis
+        'DESCRIPTION': 'All signals with detailed technical analysis'
     }
 }
 
 # To use a preset, uncomment one of these:
-# ACTIVE_PRESET = 'conservative'  # Only strong signals, short messages
-# ACTIVE_PRESET = 'balanced'      # Medium signals, medium messages
-# ACTIVE_PRESET = 'aggressive'    # More signals, detailed messages
+# ACTIVE_PRESET = 'conservative'  # Only when both MACD & RSI agree (strong signals)
+# ACTIVE_PRESET = 'balanced'      # Include single indicator signals (medium)
+# ACTIVE_PRESET = 'aggressive'    # All signals with detailed analysis
 
 def get_message_formatter():
     """Get the appropriate message formatter based on config"""
@@ -76,8 +74,8 @@ def apply_preset(preset_name):
         preset = PRESETS[preset_name]
         globals().update(preset)
         print(f"✅ Applied {preset_name} preset")
+        print(f"   Description: {preset['DESCRIPTION']}")
         print(f"   Message Format: {MESSAGE_FORMAT}")
-        print(f"   Min Buy Signals: {MIN_BUY_SIGNALS}")
         print(f"   Strong Signals Only: {SEND_ONLY_STRONG_SIGNALS}")
     else:
         print(f"❌ Preset '{preset_name}' not found")
