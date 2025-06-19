@@ -1,8 +1,8 @@
 Symbol,Current_Balance,Previous_Closing_Price,Value_Previous_Close,Last_Transaction_Price,Value_LTP,MACD_Status
-GBIME,52.0,231.56,12041.12,232.1,12069.2,"{'symbol': 'GBIME', 'current_price': np.float64(231.6), 'signal': 'WEAK_SELL', 'strength': 33.33333333333333, 'buy_signals': 0, 'sell_signals': 2, 'neutral_signals': 4, 'total_indicators': 6, 'individual_signals': {'MACD': {'signal': 'NEUTRAL', 'reason': 'MACD: 2.9532 vs Signal: 4.1483'}, 'RSI': {'signal': 'NEUTRAL', 'reason': 'RSI neutral (41.0)'}, 'MA_Trend': {'signal': 'NEUTRAL', 'reason': 'Mixed moving average signals'}, 'MA_Crossover': {'signal': 'NEUTRAL', 'reason': 'No MA crossover'}, 'Bollinger': {'signal': 'SELL', 'reason': 'Price below BB middle line'}, 'Support_Resistance': {'signal': 'SELL', 'reason': 'Breaking below support'}}, 'stop_loss': np.float64(243.18), 'target_price': np.float64(224.91), 'support': np.float64(229.5), 'resistance': np.float64(249.0), 'risk_reward_ratio': np.float64(-0.58)}"
+GBIME,52.0,231.56,12041.12,232.1,12069.2,No Signals
 GMFIL,50.0,472.26,23613.0,472.3,23615.0,SELL Signal (06/08)
 HBL,50.0,219.7,10985.0,221.0,11050.0,No Signals
 ICFC,60.0,600.2,36012.0,602.0,36120.0,No Signals
 JBLB,14.0,1290.75,18070.5,1290.0,18060.0,SELL Signal (06/19)
 JFL,20.0,456.18,9123.6,456.0,9120.0,No Signals
-UPPER,,,,,,"{'symbol': 'UPPER', 'current_price': np.float64(197.35), 'signal': 'SELL', 'strength': 50.0, 'buy_signals': 0, 'sell_signals': 3, 'neutral_signals': 3, 'total_indicators': 6, 'individual_signals': {'MACD': {'signal': 'NEUTRAL', 'reason': 'MACD: -0.8862 vs Signal: -0.6626'}, 'RSI': {'signal': 'NEUTRAL', 'reason': 'RSI neutral (30.0)'}, 'MA_Trend': {'signal': 'SELL', 'reason': 'Price below MA20 below MA50 (bearish trend)'}, 'MA_Crossover': {'signal': 'NEUTRAL', 'reason': 'No MA crossover'}, 'Bollinger': {'signal': 'SELL', 'reason': 'Price below BB middle line'}, 'Support_Resistance': {'signal': 'SELL', 'reason': 'Breaking below support'}}, 'stop_loss': np.float64(206.65), 'target_price': np.float64(193.35), 'support': np.float64(197.3), 'resistance': np.float64(202.6), 'risk_reward_ratio': np.float64(-0.43)}"
+UPPER,,,,,,No Signals
