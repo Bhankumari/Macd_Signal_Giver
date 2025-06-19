@@ -10,12 +10,32 @@ import os
 from datetime import datetime
 
 def calculate_rsi(data, period=14):
-    """Calculate RSI for stock data"""
-    delta = data['close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
+    """
+    Calculate RSI using Wilder's smoothing method (the correct/standard way)
+    This matches what you see on TradingView, Yahoo Finance, etc.
+    """
+    close_prices = data['close'].copy()
+    
+    # Calculate price changes
+    delta = close_prices.diff()
+    
+    # Separate gains and losses
+    gains = delta.where(delta > 0, 0)
+    losses = -delta.where(delta < 0, 0)
+    
+    # Calculate the first averages using simple moving average
+    avg_gain = gains.rolling(window=period).mean()
+    avg_loss = losses.rolling(window=period).mean()
+    
+    # Apply Wilder's smoothing for subsequent values
+    for i in range(period, len(gains)):
+        avg_gain.iloc[i] = (avg_gain.iloc[i-1] * (period - 1) + gains.iloc[i]) / period
+        avg_loss.iloc[i] = (avg_loss.iloc[i-1] * (period - 1) + losses.iloc[i]) / period
+    
+    # Calculate RS and RSI
+    rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
+    
     return rsi
 
 def check_personal_stocks_rsi_demo():
