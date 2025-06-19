@@ -8,6 +8,7 @@ import asyncio
 import aiohttp
 import os
 from typing import Dict, List, Any
+from enhanced_indicators import SignalAnalyzer, format_telegram_message
 
 class BotTelegramSender:
     def __init__(self, bot_token, chat_ids):
@@ -49,13 +50,14 @@ class PortfolioMACDAnalyzer:
             return None
     
     async def analyze_portfolio_macd_signals(self):
-        """Analyze MACD signals for all stocks in portfolio"""
+        """Analyze comprehensive signals for all stocks in portfolio"""
         signal_date = datetime.today().strftime('%Y-%m-%d')
         
-        print(f"\n🔍 Analyzing Portfolio MACD signals for {signal_date}...")
-        print("=" * 60)
+        print(f"\n🔍 Analyzing Portfolio with ALL INDICATORS for {signal_date}...")
+        print("=" * 80)
         
         portfolio_signals_found = []
+        analyzer = SignalAnalyzer()
         
         for stock_symbol in self.my_stocks:
             try:
@@ -69,31 +71,49 @@ class PortfolioMACDAnalyzer:
                 # Load and process data
                 data = pd.read_csv(file_path)
                 data.columns = [col.lower() for col in data.columns]
-                data = data[['published_date', 'close']]
+                
+                # Ensure we have all required columns
+                required_columns = ['published_date', 'close', 'high', 'low', 'open']
+                available_columns = data.columns.tolist()
+                
+                # Create high/low from close if not available
+                if 'high' not in available_columns:
+                    data['high'] = data['close']
+                if 'low' not in available_columns:
+                    data['low'] = data['close']
+                if 'open' not in available_columns:
+                    data['open'] = data['close']
+                
+                data = data[['published_date', 'close', 'high', 'low', 'open']]
                 data['published_date'] = pd.to_datetime(data['published_date'])
                 data['close'] = pd.to_numeric(data['close'], errors='coerce')
-                data = data.dropna(subset=['close'])
+                data['high'] = pd.to_numeric(data['high'], errors='coerce')
+                data['low'] = pd.to_numeric(data['low'], errors='coerce')
+                data['open'] = pd.to_numeric(data['open'], errors='coerce')
+                data = data.dropna()
                 data = data.sort_values(by='published_date')
                 
-                if len(data) < 26:  # Need at least 26 data points for MACD
-                    print(f"⚠️  Insufficient data for {stock_symbol} (need 26+ points, have {len(data)})")
+                if len(data) < 200:  # Need sufficient data for comprehensive analysis
+                    print(f"⚠️  Insufficient data for {stock_symbol} (need 200+ points, have {len(data)})")
                     self.macd_signals[stock_symbol] = "Insufficient Data"
                     continue
                 
-                # Calculate MACD
-                macd_data = calculate_macd(data)
+                # Comprehensive analysis using all indicators
+                analysis = analyzer.analyze_all_signals(data, stock_symbol)
+                self.macd_signals[stock_symbol] = analysis
                 
-                # Check for recent crossovers (last 5 days)
-                recent_signals = self.detect_recent_crossovers(macd_data, stock_symbol)
-                self.macd_signals[stock_symbol] = recent_signals
-                
-                # If signals found, add to portfolio signals list
-                if isinstance(recent_signals, list) and len(recent_signals) > 0:
-                    for signal in recent_signals:
-                        portfolio_signals_found.append({
-                            'stock': stock_symbol,
-                            'signal': signal
-                        })
+                # Check for strong signals
+                strong_signals = ['STRONG_BUY', 'BUY', 'STRONG_SELL', 'SELL']
+                if analysis['signal'] in strong_signals:
+                    portfolio_signals_found.append({
+                        'stock': stock_symbol,
+                        'analysis': analysis
+                    })
+                    
+                    print(f"🎯 {stock_symbol}: {analysis['signal']} (Strength: {analysis['strength']:.1f}%)")
+                    print(f"   Price: ₹{analysis['current_price']} | Target: ₹{analysis['target_price']} | Stop: ₹{analysis['stop_loss']}")
+                else:
+                    print(f"➖ {stock_symbol}: {analysis['signal']} (Strength: {analysis['strength']:.1f}%)")
                 
             except Exception as e:
                 print(f"❌ Error analyzing {stock_symbol}: {str(e)}")
@@ -101,7 +121,7 @@ class PortfolioMACDAnalyzer:
         
         # Send Telegram messages for portfolio signals (only to personal chats)
         if portfolio_signals_found and self.tg_bot_token and self.tg_personal_chat_ids:
-            await self.send_portfolio_telegram_messages(portfolio_signals_found)
+            await self.send_comprehensive_portfolio_messages(portfolio_signals_found)
     
     async def send_portfolio_telegram_messages(self, portfolio_signals):
         """Send Telegram messages for portfolio stocks with MACD signals"""
@@ -119,6 +139,24 @@ class PortfolioMACDAnalyzer:
             
             print(f"📱 Sending portfolio alert for {stock}...")
             await send_messages_with_bot(self.tg_bot_token, self.tg_personal_chat_ids, message)
+    
+    async def send_comprehensive_portfolio_messages(self, portfolio_signals):
+        """Send comprehensive analysis messages for portfolio stocks"""
+        for signal_info in portfolio_signals:
+            stock = signal_info['stock']
+            analysis = signal_info['analysis']
+            
+            # Create portfolio-specific message header
+            portfolio_header = f"💼 <b>YOUR PORTFOLIO ALERT</b>\n"
+            
+            # Format comprehensive message
+            telegram_message = format_telegram_message(analysis)
+            
+            # Add portfolio header
+            final_message = portfolio_header + telegram_message
+            
+            print(f"📱 Sending comprehensive portfolio alert for {stock}...")
+            await send_messages_with_bot(self.tg_bot_token, self.tg_personal_chat_ids, final_message)
 
     def detect_recent_crossovers(self, data, stock_symbol, days_back=5):
         """Detect MACD crossovers in recent days"""
@@ -541,49 +579,49 @@ def calculate_macd(data, short_window=12, long_window=26, signal_window=9):
     return data
 
 
-async def detect_intersections(data, company_symbol, signal_date, tg_bot_token, tg_group_chat_ids):
-    """Function to detect MACD crossovers and print signals"""
-    intersections = []
-
-    for i in range(1, len(data)):
-        # Check for MACD crossing Signal line (Intersection)
-        if (data['macd'].iloc[i] > data['signal'].iloc[i] and data['macd'].iloc[i - 1] <= data['signal'].iloc[i - 1]):
-            # Buy signal: MACD crosses signal line from below
-            intersections.append((data['published_date'].iloc[i], data['macd'].iloc[i], data['signal'].iloc[i], "Buy Signal"))
-        elif (data['macd'].iloc[i] < data['signal'].iloc[i] and data['macd'].iloc[i - 1] >= data['signal'].iloc[i - 1]):
-            # Sell signal: MACD crosses signal line from above
-            intersections.append((data['published_date'].iloc[i], data['macd'].iloc[i], data['signal'].iloc[i], "Sell Signal"))
-
-    # Print intersection points and signal types
-    for date, macd_val, signal_val, signal_type in intersections:
-        # Define today's date in the same format as the 'date' variable
-        today_date = datetime.strptime(f"{signal_date} 00:00:00", "%Y-%m-%d %H:%M:%S")
-
-        # Convert 'date' to datetime for consistent comparison
-        intersection_date = datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S")
-
-        if intersection_date == today_date:
-            # Choose color based on signal type
-            if signal_type == "Buy Signal":
-                signal_color = "\033[92m"  # Green for Buy Signal
-            elif signal_type == "Sell Signal":
-                signal_color = "\033[91m"  # Red for Sell Signal
-            else:
-                signal_color = "\033[0m"  # Default (no color)
-
-            symbol_color = "\033[94m\033[1m"  # Blue and bold for company symbol
-            reset_color = "\033[0m"  # Reset to default color
-
-            # Simplified print statement - only signal type and company name
-            print(f"\n\n{signal_type}: {company_symbol} ({intersection_date.strftime('%Y-%m-%d')})")
+async def detect_comprehensive_signals(data, company_symbol, signal_date, tg_bot_token, tg_group_chat_ids):
+    """Enhanced function to detect comprehensive trading signals using multiple indicators"""
+    
+    # Initialize signal analyzer
+    analyzer = SignalAnalyzer()
+    
+    # Analyze all indicators
+    analysis = analyzer.analyze_all_signals(data, company_symbol)
+    
+    # Check if we have a strong signal to send
+    strong_signals = ['STRONG_BUY', 'BUY', 'STRONG_SELL', 'SELL']
+    
+    if analysis['signal'] in strong_signals:
+        # Print comprehensive analysis
+        print(f"\n🎯 COMPREHENSIVE ANALYSIS FOR {company_symbol}")
+        print(f"Signal: {analysis['signal']} (Strength: {analysis['strength']:.1f}%)")
+        print(f"Current Price: ₹{analysis['current_price']}")
+        print(f"Target: ₹{analysis['target_price']}")
+        print(f"Stop Loss: ₹{analysis['stop_loss']}")
+        print(f"Risk/Reward: 1:{analysis['risk_reward_ratio']}")
+        print(f"Support: ₹{analysis['support']} | Resistance: ₹{analysis['resistance']}")
         
-            # Simplified message - only signal type and company name
-            message = f"{signal_type}: {company_symbol} ({intersection_date.strftime('%Y-%m-%d')})"
-
-            # Uncomment the following line to enable Telegram messages
-            await send_messages_with_bot(tg_bot_token, tg_group_chat_ids, message)
-
-    return intersections
+        print(f"\n📊 Signal Breakdown:")
+        print(f"✅ Buy Signals: {analysis['buy_signals']}/{analysis['total_indicators']}")
+        print(f"❌ Sell Signals: {analysis['sell_signals']}/{analysis['total_indicators']}")
+        print(f"➖ Neutral: {analysis['neutral_signals']}/{analysis['total_indicators']}")
+        
+        print(f"\n🔍 Individual Indicators:")
+        for indicator, details in analysis['individual_signals'].items():
+            icon = '✅' if details['signal'] == 'BUY' else '❌' if details['signal'] == 'SELL' else '➖'
+            print(f"{icon} {indicator}: {details['reason']}")
+        
+        # Format comprehensive Telegram message
+        telegram_message = format_telegram_message(analysis)
+        
+        # Send comprehensive signal to Telegram
+        await send_messages_with_bot(tg_bot_token, tg_group_chat_ids, telegram_message)
+        
+        return analysis
+    else:
+        # Print basic info for weak/neutral signals
+        print(f"\n➖ {company_symbol}: {analysis['signal']} (Strength: {analysis['strength']:.1f}%) - No action needed")
+        return None
 
 
 async def send_messages_with_bot(bot_token, group_chat_ids, message):
@@ -665,10 +703,11 @@ async def main():
     cookies, csrf_token = fetch_cookies_and_csrf_token(base_url, headers)
     headers = update_headers(headers, cookies, csrf_token)
 
-    print("🚀 Starting MACD Signal Analysis...")
-    print("="*60)
-    print("PHASE 1: General Stock Analysis")
-    print("="*60)
+    print("🚀 Starting COMPREHENSIVE TECHNICAL ANALYSIS...")
+    print("="*80)
+    print("PHASE 1: General Stock Analysis (ALL INDICATORS)")
+    print("📊 Using: MACD, RSI, Moving Averages, Bollinger Bands, Support/Resistance")
+    print("="*80)
 
     # Load stock symbols from CSV
     with open("stock_list.csv", "r", encoding="utf-8") as file:
@@ -709,11 +748,16 @@ async def main():
         # Ensure data is sorted by date
         data = data.sort_values(by='published_date')
 
-        # Calculate MACD and Signal line
-        macd_data = calculate_macd(data)
-
-        # Detect intersections and print signals (send to all chats - both group and personal)
-        await detect_intersections(macd_data, company_symbol, signal_date, tg_bot_token, tg_all_chat_ids)
+        # Ensure we have all required columns for comprehensive analysis
+        if 'high' not in data.columns:
+            data['high'] = data['close']
+        if 'low' not in data.columns:
+            data['low'] = data['close']
+        if 'open' not in data.columns:
+            data['open'] = data['close']
+        
+        # Comprehensive signal analysis (send to all chats - both group and personal)
+        await detect_comprehensive_signals(data, company_symbol, signal_date, tg_bot_token, tg_all_chat_ids)
 
     print("\n" + "="*60)
     print("PHASE 2: Personal Portfolio Analysis")
@@ -741,10 +785,18 @@ async def main():
     # Check for open IPOs and send notifications
     await ipo_checker.check_and_notify_ipos()
     
-    print("\n🎉 Complete Analysis Finished!")
-    print("✅ MACD signals analyzed and updated in 'my_portfolio.csv'")
-    print("📱 Portfolio alerts sent to Telegram if signals detected!")
+    print("\n🎉 COMPREHENSIVE TECHNICAL ANALYSIS COMPLETE!")
+    print("✅ All indicators analyzed: MACD, RSI, Moving Averages, Bollinger Bands, Support/Resistance")
+    print("📊 Signals generated with stop-loss and target prices")
+    print("📱 Comprehensive alerts sent to Telegram with full analysis!")
+    print("💼 Portfolio alerts sent to personal chat only")
     print("🎯 IPO opportunities checked and notified if available!")
+    print("\n🔍 Signal Strength Levels:")
+    print("🟢🟢🟢 STRONG_BUY: 4+ buy indicators")
+    print("🟢🟢 BUY: 3 buy indicators") 
+    print("🔴🔴🔴 STRONG_SELL: 4+ sell indicators")
+    print("🔴🔴 SELL: 3 sell indicators")
+    print("🟡 NEUTRAL/WEAK: Mixed or insufficient signals")
 
 if __name__ == "__main__":
     asyncio.run(main())
