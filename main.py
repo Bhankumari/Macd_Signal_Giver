@@ -32,9 +32,10 @@ class BotTelegramSender:
 
 class PortfolioMACDAnalyzer:
     def __init__(self, tg_bot_token=None, tg_group_chat_ids=None, tg_personal_chat_ids=None):
-        self.my_stocks = ['BHDC', 'RURU', 'HBL', 'ICFC', 'JBLB', 'JFL', 'TVCL']
+        self.my_stocks = ['GBIME', 'RURU', 'HBL', 'ICFC', 'JBLB', 'JFL', 'UPPER']
         self.portfolio_data = []
         self.macd_signals = {}
+        self.rsi_alerts = {}
         self.tg_bot_token = tg_bot_token
         self.tg_group_chat_ids = tg_group_chat_ids
         self.tg_personal_chat_ids = tg_personal_chat_ids
@@ -179,6 +180,22 @@ class PortfolioMACDAnalyzer:
             print(f"\n📈 {stock}")
             print(f"   Balance: {balance} | LTP: {ltp} | Value: {value_ltp}")
             
+            # Check RSI status
+            if stock in self.rsi_alerts:
+                rsi_info = self.rsi_alerts[stock]
+                if isinstance(rsi_info, dict):
+                    rsi_value = rsi_info['rsi']
+                    rsi_status = rsi_info['status']
+                    
+                    if rsi_status == 'OVERSOLD':
+                        print(f"   🟢 RSI: {rsi_value:.1f} - OVERSOLD (Buy opportunity)")
+                    elif rsi_status == 'OVERBOUGHT':
+                        print(f"   🔴 RSI: {rsi_value:.1f} - OVERBOUGHT (Consider selling)")
+                    else:
+                        print(f"   ⚪ RSI: {rsi_value:.1f} - NEUTRAL")
+                else:
+                    print(f"   ⚠️  RSI: {rsi_info}")
+            
             # Check MACD signals
             if stock in self.macd_signals:
                 signals = self.macd_signals[stock]
@@ -244,6 +261,120 @@ class PortfolioMACDAnalyzer:
             
         except Exception as e:
             print(f"❌ Error updating CSV: {str(e)}")
+
+    def calculate_rsi(self, data, period=14):
+        """Calculate RSI for stock data"""
+        delta = data['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+    
+    async def check_personal_stocks_rsi(self):
+        """Check RSI levels for personal stocks and alert if oversold/overbought"""
+        print(f"\n📊 Checking RSI levels for personal stocks...")
+        print("=" * 60)
+        
+        rsi_alerts = []
+        
+        for stock_symbol in self.my_stocks:
+            try:
+                file_path = f"data/{stock_symbol}.csv"
+                
+                if not os.path.exists(file_path):
+                    print(f"⚠️  No data file found for {stock_symbol}")
+                    continue
+                
+                # Load and process data
+                data = pd.read_csv(file_path)
+                data.columns = [col.lower() for col in data.columns]
+                data = data[['published_date', 'close']]
+                data['published_date'] = pd.to_datetime(data['published_date'])
+                data['close'] = pd.to_numeric(data['close'], errors='coerce')
+                data = data.dropna(subset=['close'])
+                data = data.sort_values(by='published_date')
+                
+                if len(data) < 14:  # Need at least 14 data points for RSI
+                    print(f"⚠️  Insufficient data for {stock_symbol} RSI (need 14+ points, have {len(data)})")
+                    continue
+                
+                # Calculate RSI
+                rsi = self.calculate_rsi(data)
+                current_rsi = rsi.iloc[-1]
+                current_price = data['close'].iloc[-1]
+                
+                # Check for oversold or overbought conditions
+                rsi_status = None
+                alert_emoji = ""
+                
+                if current_rsi < 30:
+                    rsi_status = "OVERSOLD"
+                    alert_emoji = "🟢"  # Green for potential buy opportunity
+                elif current_rsi > 70:
+                    rsi_status = "OVERBOUGHT"
+                    alert_emoji = "🔴"  # Red for potential sell opportunity
+                
+                # Always show RSI value for personal stocks
+                print(f"📈 {stock_symbol}: RSI = {current_rsi:.1f} | Price = {current_price:.2f}", end="")
+                
+                if rsi_status:
+                    print(f" {alert_emoji} {rsi_status}")
+                    rsi_alerts.append({
+                        'stock': stock_symbol,
+                        'rsi': current_rsi,
+                        'price': current_price,
+                        'status': rsi_status,
+                        'emoji': alert_emoji
+                    })
+                else:
+                    print(" ⚪ NEUTRAL")
+                
+                self.rsi_alerts[stock_symbol] = {
+                    'rsi': current_rsi,
+                    'price': current_price,
+                    'status': rsi_status or 'NEUTRAL'
+                }
+                
+            except Exception as e:
+                print(f"❌ Error checking RSI for {stock_symbol}: {str(e)}")
+                self.rsi_alerts[stock_symbol] = "Error"
+        
+        # Send Telegram alerts for oversold/overbought stocks
+        if rsi_alerts and self.tg_bot_token and self.tg_personal_chat_ids:
+            await self.send_rsi_telegram_alerts(rsi_alerts)
+    
+    async def send_rsi_telegram_alerts(self, rsi_alerts):
+        """Send Telegram alerts for RSI oversold/overbought conditions"""
+        if not rsi_alerts:
+            return
+        
+        # Create comprehensive RSI status message
+        message_lines = ["📊 YOUR PORTFOLIO RSI STATUS", "=" * 25]
+        
+        for alert in rsi_alerts:
+            stock = alert['stock']
+            rsi = alert['rsi']
+            price = alert['price']
+            status = alert['status']
+            emoji = alert['emoji']
+            
+            message_lines.append(f"{emoji} {stock}: RSI {rsi:.1f} - {status}")
+            message_lines.append(f"   Price: {price:.2f}")
+            
+            if status == "OVERSOLD":
+                message_lines.append("   💡 Potential BUY opportunity")
+            elif status == "OVERBOUGHT":
+                message_lines.append("   💡 Consider taking profits")
+            
+            message_lines.append("")
+        
+        message_lines.append("⚠️ Always do your own research before trading!")
+        
+        message = "\n".join(message_lines)
+        
+        print(f"📱 Sending RSI alerts to personal chat...")
+        await send_messages_with_bot(self.tg_bot_token, self.tg_personal_chat_ids, message)
 
 class IPOChecker:
     def __init__(self, tg_bot_token=None, tg_group_chat_ids=None, tg_personal_chat_ids=None):
@@ -724,6 +855,9 @@ async def main():
     
     # Analyze MACD signals for portfolio (now async)
     await portfolio_analyzer.analyze_portfolio_macd_signals()
+    
+    # Check RSI levels for personal stocks
+    await portfolio_analyzer.check_personal_stocks_rsi()
     
     # Display detailed portfolio analysis
     portfolio_analyzer.display_portfolio_analysis()
