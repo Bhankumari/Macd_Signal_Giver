@@ -743,22 +743,63 @@ def calculate_macd(data, short_window=12, long_window=26, signal_window=9):
 
     return data
 
+def calculate_rsi_for_general_stocks(data, period=14):
+    """
+    Calculate RSI using Wilder's smoothing method for general stocks
+    This matches the RSI calculation used for portfolio stocks
+    """
+    close_prices = data['close'].copy()
+    
+    # Calculate price changes
+    delta = close_prices.diff()
+    
+    # Separate gains and losses
+    gains = delta.where(delta > 0, 0)
+    losses = -delta.where(delta < 0, 0)
+    
+    # Calculate the first averages using simple moving average
+    avg_gain = gains.rolling(window=period).mean()
+    avg_loss = losses.rolling(window=period).mean()
+    
+    # Apply Wilder's smoothing for subsequent values
+    for i in range(period, len(gains)):
+        avg_gain.iloc[i] = (avg_gain.iloc[i-1] * (period - 1) + gains.iloc[i]) / period
+        avg_loss.iloc[i] = (avg_loss.iloc[i-1] * (period - 1) + losses.iloc[i]) / period
+    
+    # Calculate RS and RSI
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    
+    return rsi
+
+def get_rsi_status_emoji(rsi_value):
+    """Get RSI status and emoji based on RSI value"""
+    if rsi_value < 30:
+        return "OVERSOLD", "🟢"
+    elif rsi_value > 70:
+        return "OVERBOUGHT", "🔴"
+    else:
+        return "NEUTRAL", "⚪"
+
 
 async def detect_intersections(data, company_symbol, signal_date, tg_bot_token, tg_group_chat_ids):
-    """Function to detect MACD crossovers and print signals"""
+    """Function to detect MACD crossovers and print signals with RSI information"""
     intersections = []
+    
+    # Calculate RSI for this stock
+    rsi_data = calculate_rsi_for_general_stocks(data)
 
     for i in range(1, len(data)):
         # Check for MACD crossing Signal line (Intersection)
         if (data['macd'].iloc[i] > data['signal'].iloc[i] and data['macd'].iloc[i - 1] <= data['signal'].iloc[i - 1]):
             # Buy signal: MACD crosses signal line from below
-            intersections.append((data['published_date'].iloc[i], data['macd'].iloc[i], data['signal'].iloc[i], "Buy Signal"))
+            intersections.append((data['published_date'].iloc[i], data['macd'].iloc[i], data['signal'].iloc[i], "Buy Signal", i))
         elif (data['macd'].iloc[i] < data['signal'].iloc[i] and data['macd'].iloc[i - 1] >= data['signal'].iloc[i - 1]):
             # Sell signal: MACD crosses signal line from above
-            intersections.append((data['published_date'].iloc[i], data['macd'].iloc[i], data['signal'].iloc[i], "Sell Signal"))
+            intersections.append((data['published_date'].iloc[i], data['macd'].iloc[i], data['signal'].iloc[i], "Sell Signal", i))
 
-    # Print intersection points and signal types
-    for date, macd_val, signal_val, signal_type in intersections:
+    # Print intersection points and signal types with RSI information
+    for date, macd_val, signal_val, signal_type, index in intersections:
         # Define today's date in the same format as the 'date' variable
         today_date = datetime.strptime(f"{signal_date} 00:00:00", "%Y-%m-%d %H:%M:%S")
 
@@ -766,6 +807,13 @@ async def detect_intersections(data, company_symbol, signal_date, tg_bot_token, 
         intersection_date = datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S")
 
         if intersection_date == today_date:
+            # Get RSI value and current price for this signal
+            current_rsi = rsi_data.iloc[index] if not pd.isna(rsi_data.iloc[index]) else 50.0
+            current_price = data['close'].iloc[index]
+            
+            # Get RSI status and emoji
+            rsi_status, rsi_emoji = get_rsi_status_emoji(current_rsi)
+            
             # Choose color based on signal type
             if signal_type == "Buy Signal":
                 signal_color = "\033[92m"  # Green for Buy Signal
@@ -777,13 +825,13 @@ async def detect_intersections(data, company_symbol, signal_date, tg_bot_token, 
             symbol_color = "\033[94m\033[1m"  # Blue and bold for company symbol
             reset_color = "\033[0m"  # Reset to default color
 
-            # Simplified print statement - only signal type and company name
-            print(f"\n\n{signal_type}: {company_symbol} ({intersection_date.strftime('%Y-%m-%d')})")
+            # Enhanced print statement with RSI information
+            print(f"\n\n{signal_type}: {company_symbol} | RSI: {current_rsi:.1f} {rsi_emoji} {rsi_status} | Price: {current_price:.2f} ({intersection_date.strftime('%Y-%m-%d')})")
         
-            # Simplified message - only signal type and company name
-            message = f"{signal_type}: {company_symbol} ({intersection_date.strftime('%Y-%m-%d')})"
+            # Enhanced message with RSI information for Telegram
+            message = f"{signal_type}: RSI {current_rsi:.1f} {rsi_emoji}: Price: {current_price:.2f} & {company_symbol}"
 
-            # Uncomment the following line to enable Telegram messages
+            # Send Telegram message
             await send_messages_with_bot(tg_bot_token, tg_group_chat_ids, message)
 
     return intersections
