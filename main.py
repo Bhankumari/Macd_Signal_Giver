@@ -32,7 +32,7 @@ class BotTelegramSender:
 
 class PortfolioMACDAnalyzer:
     def __init__(self, tg_bot_token=None, tg_group_chat_ids=None, tg_personal_chat_ids=None):
-        self.my_stocks = ['TVCL', 'JFL', 'PFL', 'ICFC', 'JBLB', 'JFL','JOSHI']
+        self.my_stocks = ['CFCL', 'JFL', 'PFL', 'ICFC', 'JFL','BFC']
         self.portfolio_data = []
         self.macd_signals = {}
         self.rsi_alerts = {}
