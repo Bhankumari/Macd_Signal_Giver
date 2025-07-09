@@ -4395,6 +4395,11 @@
         "companyname": "Nepal Infrastructure Bank Limited"
     },
     {
+        "id": 1547,
+        "symbol": "NIFRAGED",
+        "companyname": "6% Nifra Harit Urja Debenture 2088/89"
+    },
+    {
         "id": 1502,
         "symbol": "NIFRAP",
         "companyname": "Nepal Infrastructure Bank Limited Promoter"
@@ -4403,11 +4408,6 @@
         "id": 1175,
         "symbol": "NIFRAUR85/86",
         "companyname": "7% NIFRA Urja Rinpatra 2085/86"
-    },
-    {
-        "id": 1547,
-        "symbol": "NIFRAUR88/89",
-        "companyname": "6% Nifra Harit Urja Debenture 2088/89"
     },
     {
         "id": 1309,
