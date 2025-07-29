@@ -2125,6 +2125,11 @@
         "companyname": "Himalayan Life Insurance Limited"
     },
     {
+        "id": 1606,
+        "symbol": "HLILCF",
+        "companyname": "HLI Large Cap Fund"
+    },
+    {
         "id": 1330,
         "symbol": "HLIPO",
         "companyname": "Himalayan Life Insurance Limited Promoter Share"
@@ -3673,6 +3678,11 @@
         "id": 1207,
         "symbol": "MSNL",
         "companyname": "Music Nepal Limited"
+    },
+    {
+        "id": 1605,
+        "symbol": "MSY",
+        "companyname": "Machhapuchchhre SIP Yojana"
     },
     {
         "id": 336,
@@ -6148,6 +6158,11 @@
         "id": 685,
         "symbol": "SEF",
         "companyname": "Siddhartha Equity Fund"
+    },
+    {
+        "id": 1604,
+        "symbol": "SEF2",
+        "companyname": "Siddhartha Equity Fund 2"
     },
     {
         "id": 933,
