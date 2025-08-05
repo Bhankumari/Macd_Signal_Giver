@@ -794,6 +794,7 @@ def get_rsi_status_emoji(rsi_value):
 async def detect_intersections(data, company_symbol, signal_date, email_sender):
     """Function to detect MACD crossovers and print signals with RSI information"""
     intersections = []
+    signals_found = []
     
     # Calculate RSI for this stock
     rsi_data = calculate_rsi_for_general_stocks(data)
@@ -826,26 +827,101 @@ async def detect_intersections(data, company_symbol, signal_date, email_sender):
             # Enhanced print statement with RSI information
             print(f"\n\n{signal_type}: {company_symbol} | RSI: {current_rsi:.1f} {rsi_emoji} {rsi_status} | Price: {current_price:.2f} ({intersection_date.strftime('%Y-%m-%d')})")
         
-            # Send email notification for general stock signals
-            if email_sender:
-                template = EMAIL_TEMPLATES["general_signal"]
-                subject = f"{template['subject_prefix']}: {company_symbol}"
-                message = template["body_template"].format(
-                    signal_type=signal_type,
-                    stock_symbol=company_symbol,
-                    rsi=current_rsi,
-                    rsi_emoji=rsi_emoji,
-                    rsi_status=rsi_status,
-                    price=current_price,
-                    date=intersection_date.strftime('%Y-%m-%d'),
-                    macd=macd_val,
-                    signal=signal_val
-                )
-                email_sender.send_email(subject, message)
+            # Collect signal for batch email
+            signals_found.append({
+                'signal_type': signal_type,
+                'stock_symbol': company_symbol,
+                'rsi': current_rsi,
+                'rsi_emoji': rsi_emoji,
+                'rsi_status': rsi_status,
+                'price': current_price,
+                'date': intersection_date.strftime('%Y-%m-%d'),
+                'macd': macd_val,
+                'signal': signal_val
+            })
 
-    return intersections
+    return intersections, signals_found
 
 
+async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=None):
+    """Send a summary email with all MACD signals found and IPO alerts"""
+    has_signals = all_signals and len(all_signals) > 0
+    has_ipos = ipo_alerts and len(ipo_alerts) > 0
+    
+    if not has_signals and not has_ipos:
+        return
+    
+    # Count signals by type
+    buy_signals = [s for s in all_signals if s['signal_type'] == 'Buy Signal']
+    sell_signals = [s for s in all_signals if s['signal_type'] == 'Sell Signal']
+    
+    subject = f"📊 Market Analysis Summary - {signal_date}"
+    
+    # Create summary message
+    message_lines = [
+        f"<h1>📊 Market Analysis Summary Report</h1>",
+        f"<p><strong>Date:</strong> {signal_date}</p>",
+        "<hr>"
+    ]
+    
+    if has_signals:
+        message_lines.extend([
+            f"<h2>📈 MACD Signals</h2>",
+            f"<p><strong>Total Signals Found:</strong> {len(all_signals)}</p>",
+            f"<p><strong>Buy Signals:</strong> {len(buy_signals)}</p>",
+            f"<p><strong>Sell Signals:</strong> {len(sell_signals)}</p>",
+            "<hr>"
+        ])
+        
+        if buy_signals:
+            message_lines.append("<h3>🟢 Buy Signals</h3>")
+            for signal in buy_signals:
+                message_lines.append(f"<h4>📈 {signal['stock_symbol']}</h4>")
+                message_lines.append(f"<p><strong>RSI:</strong> {signal['rsi']:.1f} {signal['rsi_emoji']} {signal['rsi_status']}</p>")
+                message_lines.append(f"<p><strong>Price:</strong> {signal['price']:.2f}</p>")
+                message_lines.append(f"<p><strong>MACD:</strong> {signal['macd']:.4f}</p>")
+                message_lines.append(f"<p><strong>Signal Line:</strong> {signal['signal']:.4f}</p>")
+                message_lines.append("<hr>")
+        
+        if sell_signals:
+            message_lines.append("<h3>🔴 Sell Signals</h3>")
+            for signal in sell_signals:
+                message_lines.append(f"<h4>📉 {signal['stock_symbol']}</h4>")
+                message_lines.append(f"<p><strong>RSI:</strong> {signal['rsi']:.1f} {signal['rsi_emoji']} {signal['rsi_status']}</p>")
+                message_lines.append(f"<p><strong>Price:</strong> {signal['price']:.2f}</p>")
+                message_lines.append(f"<p><strong>MACD:</strong> {signal['macd']:.4f}</p>")
+                message_lines.append(f"<p><strong>Signal Line:</strong> {signal['signal']:.4f}</p>")
+                message_lines.append("<hr>")
+    
+    if has_ipos:
+        message_lines.extend([
+            f"<h2>🎯 IPO Opportunities</h2>",
+            f"<p><strong>Open IPOs Found:</strong> {len(ipo_alerts)}</p>",
+            "<hr>"
+        ])
+        
+        for ipo in ipo_alerts:
+            message_lines.append(f"<h3>🏢 {ipo.get('companyName', 'Unknown Company')}</h3>")
+            message_lines.append(f"<p><strong>📈 Symbol:</strong> {ipo.get('stockSymbol', 'N/A')}</p>")
+            message_lines.append(f"<p><strong>🏭 Sector:</strong> {ipo.get('sectorName', 'N/A')}</p>")
+            message_lines.append(f"<p><strong>💰 Price per Unit:</strong> Rs. {ipo.get('pricePerUnit', 'N/A')}</p>")
+            message_lines.append(f"<p><strong>📊 Min Units:</strong> {ipo.get('minUnits', 'N/A')}</p>")
+            message_lines.append(f"<p><strong>📊 Max Units:</strong> {ipo.get('maxUnits', 'N/A')}</p>")
+            message_lines.append(f"<p><strong>💼 Total Amount:</strong> Rs. {ipo.get('totalAmount', 'N/A')}</p>")
+            message_lines.append(f"<p><strong>📅 Opens:</strong> {ipo.get('openingDateAD', 'N/A')}</p>")
+            message_lines.append(f"<p><strong>📅 Closes:</strong> {ipo.get('closingDateAD', 'N/A')}</p>")
+            message_lines.append(f"<p><strong>🏛️ Registrar:</strong> {ipo.get('shareRegistrar', 'N/A')}</p>")
+            if ipo.get('rating'):
+                message_lines.append(f"<p><strong>⭐ Rating:</strong> {ipo.get('rating')}</p>")
+            message_lines.append("<hr>")
+    
+    message_lines.append("<p><em>⚠️ Always do your own research before trading!</em></p>")
+    
+    message = "\n".join(message_lines)
+    
+    total_items = len(all_signals) + len(ipo_alerts) if ipo_alerts else len(all_signals)
+    print(f"📧 Sending summary email with {total_items} total items...")
+    email_sender.send_email(subject, message)
 
 
 async def main():
@@ -924,6 +1000,9 @@ async def main():
     # Filter company data
     filtered_data = load_company_data("company_data.json", stock_list)
 
+    # Collect all signals for batch email
+    all_signals = []
+
     for company in filtered_data:
         company_id = company["id"]
         company_symbol = company["symbol"].replace('/', '-')
@@ -957,8 +1036,9 @@ async def main():
         # Calculate MACD and Signal line
         macd_data = calculate_macd(data)
 
-        # Detect intersections and print signals (send via email)
-        await detect_intersections(macd_data, company_symbol, signal_date, email_sender)
+        # Detect intersections and collect signals
+        intersections, signals_found = await detect_intersections(macd_data, company_symbol, signal_date, email_sender)
+        all_signals.extend(signals_found)
 
     print("\n" + "="*60)
     print("PHASE 2: Personal Portfolio Analysis")
@@ -968,7 +1048,7 @@ async def main():
     portfolio_analyzer = PortfolioMACDAnalyzer(email_sender)
     
     # Analyze MACD signals for portfolio (now async)
-    await portfolio_analyzer.analyze_portfolio_macd_signals()
+    portfolio_signals = await portfolio_analyzer.analyze_portfolio_macd_signals()
     
     # Check RSI levels for personal stocks
     await portfolio_analyzer.check_personal_stocks_rsi()
@@ -979,6 +1059,10 @@ async def main():
     # Update CSV file with signals
     portfolio_analyzer.update_csv_with_signals()
     
+    # Add portfolio signals to all signals
+    if portfolio_signals:
+        all_signals.extend(portfolio_signals)
+    
     print("\n" + "="*60)
     print("PHASE 3: IPO Opportunity Check")
     print("="*60)
@@ -986,12 +1070,16 @@ async def main():
     # Initialize and run IPO checker
     ipo_checker = IPOChecker(email_sender)
     
-    # Check for open IPOs and send notifications
-    await ipo_checker.check_and_notify_ipos()
+    # Check for open IPOs and collect alerts
+    ipo_alerts = await ipo_checker.check_and_notify_ipos()
+    
+    # Send summary email with all signals and IPO alerts
+    if (all_signals or ipo_alerts) and email_sender:
+        await send_summary_email(all_signals, email_sender, signal_date, ipo_alerts)
     
     print("\n🎉 Complete Analysis Finished!")
     print("✅ MACD signals analyzed and updated in 'my_portfolio.csv'")
-    print("📧 Portfolio alerts sent to email if signals detected!")
+    print("📧 Summary email sent with all signals!")
     print("🎯 IPO opportunities checked and notified if available!")
 
 if __name__ == "__main__":
