@@ -7,38 +7,59 @@ from datetime import datetime
 import asyncio
 import aiohttp
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from typing import Dict, List, Any
+from email_config import (
+    SMTP_EMAIL, SMTP_PASSWORD, RECIPIENT_EMAIL, SMTP_SERVER, SMTP_PORT,
+    PORTFOLIO_STOCKS, EMAIL_TEMPLATES, RSI_OVERSOLD_THRESHOLD, RSI_OVERBOUGHT_THRESHOLD
+)
 
-class BotTelegramSender:
-    def __init__(self, bot_token, chat_ids):
-        self.bot_token = bot_token
-        self.chat_ids = chat_ids
-        self.api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+class EmailSender:
+    def __init__(self, smtp_email=None, smtp_password=None, recipient_email=None):
+        self.smtp_email = smtp_email or SMTP_EMAIL
+        self.smtp_password = smtp_password or SMTP_PASSWORD
+        self.recipient_email = recipient_email or RECIPIENT_EMAIL
+        self.smtp_server = SMTP_SERVER
+        self.smtp_port = SMTP_PORT
     
-    async def send_message(self, message):
-        async with aiohttp.ClientSession() as session:
-            for chat_id in self.chat_ids:
-                payload = {
-                    "chat_id": chat_id,
-                    "text": message,
-                    "parse_mode": "HTML"
-                }
-                async with session.post(self.api_url, data=payload) as response:
-                    if response.status != 200:
-                        response_text = await response.text()
-                        print(f"Failed to send message to {chat_id}. Status: {response.status}. Response: {response_text}")
-                    else:
-                        print(f"Message sent successfully to chat {chat_id}")
+    def send_email(self, subject, message):
+        """Send email using SMTP"""
+        try:
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = self.smtp_email
+            msg['To'] = self.recipient_email
+            msg['Subject'] = subject
+            
+            # Add body to email
+            msg.attach(MIMEText(message, 'html'))
+            
+            # Create SMTP session
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+            server.starttls()
+            server.login(self.smtp_email, self.smtp_password)
+            
+            # Send email
+            text = msg.as_string()
+            server.sendmail(self.smtp_email, self.recipient_email, text)
+            server.quit()
+            
+            print(f"📧 Email sent successfully to {self.recipient_email}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Failed to send email: {str(e)}")
+            return False
 
 class PortfolioMACDAnalyzer:
-    def __init__(self, tg_bot_token=None, tg_group_chat_ids=None, tg_personal_chat_ids=None):
-        self.my_stocks = ['CFCL', 'JFL', 'PFL', 'ICFC', 'JFL','BFC']
+    def __init__(self, email_sender=None):
+        self.my_stocks = PORTFOLIO_STOCKS
         self.portfolio_data = []
         self.macd_signals = {}
         self.rsi_alerts = {}
-        self.tg_bot_token = tg_bot_token
-        self.tg_group_chat_ids = tg_group_chat_ids
-        self.tg_personal_chat_ids = tg_personal_chat_ids
+        self.email_sender = email_sender
         
     def load_portfolio_from_csv(self, filename='my_portfolio.csv'):
         """Load portfolio data from CSV file"""
@@ -100,12 +121,18 @@ class PortfolioMACDAnalyzer:
                 print(f"❌ Error analyzing {stock_symbol}: {str(e)}")
                 self.macd_signals[stock_symbol] = "Error"
         
-        # Send Telegram messages for portfolio signals (only to personal chats)
-        if portfolio_signals_found and self.tg_bot_token and self.tg_personal_chat_ids:
-            await self.send_portfolio_telegram_messages(portfolio_signals_found)
+        # Send email messages for portfolio signals
+        if portfolio_signals_found and self.email_sender:
+            await self.send_portfolio_email_messages(portfolio_signals_found)
     
-    async def send_portfolio_telegram_messages(self, portfolio_signals):
-        """Send Telegram messages for portfolio stocks with MACD signals"""
+    async def send_portfolio_email_messages(self, portfolio_signals):
+        """Send email messages for portfolio stocks with MACD signals"""
+        if not portfolio_signals:
+            return
+            
+        subject = "🚨 Portfolio MACD Signal Alert"
+        message_lines = ["<h2>📊 Portfolio MACD Signal Alert</h2>", "<hr>"]
+        
         for signal_info in portfolio_signals:
             stock = signal_info['stock']
             signal = signal_info['signal']
@@ -114,12 +141,26 @@ class PortfolioMACDAnalyzer:
             
             # Create message for user's portfolio stocks
             if signal_type == 'BUY':
-                message = f"🟢 Your Stock Alert: {stock} - BUY SIGNAL detected on {date}\nMACD: {signal['macd']} | Signal Line: {signal['signal']}\n📈 Consider reviewing your position!"
+                message_lines.append(f"<h3>🟢 {stock} - BUY SIGNAL</h3>")
+                message_lines.append(f"<p><strong>Date:</strong> {date}</p>")
+                message_lines.append(f"<p><strong>MACD:</strong> {signal['macd']}</p>")
+                message_lines.append(f"<p><strong>Signal Line:</strong> {signal['signal']}</p>")
+                message_lines.append("<p>📈 Consider reviewing your position!</p>")
             else:
-                message = f"🔴 Your Stock Alert: {stock} - SELL SIGNAL detected on {date}\nMACD: {signal['macd']} | Signal Line: {signal['signal']}\n📉 Consider reviewing your position!"
+                message_lines.append(f"<h3>🔴 {stock} - SELL SIGNAL</h3>")
+                message_lines.append(f"<p><strong>Date:</strong> {date}</p>")
+                message_lines.append(f"<p><strong>MACD:</strong> {signal['macd']}</p>")
+                message_lines.append(f"<p><strong>Signal Line:</strong> {signal['signal']}</p>")
+                message_lines.append("<p>📉 Consider reviewing your position!</p>")
             
-            print(f"📱 Sending portfolio alert for {stock}...")
-            await send_messages_with_bot(self.tg_bot_token, self.tg_personal_chat_ids, message)
+            message_lines.append("<hr>")
+        
+        message_lines.append("<p><em>⚠️ Always do your own research before trading!</em></p>")
+        
+        message = "\n".join(message_lines)
+        
+        print(f"📧 Sending portfolio alert email...")
+        self.email_sender.send_email(subject, message)
 
     def detect_recent_crossovers(self, data, stock_symbol, days_back=5):
         """Detect MACD crossovers in recent days"""
@@ -328,10 +369,10 @@ class PortfolioMACDAnalyzer:
                 rsi_status = None
                 alert_emoji = ""
                 
-                if current_rsi < 30:
+                if current_rsi < RSI_OVERSOLD_THRESHOLD:
                     rsi_status = "OVERSOLD"
                     alert_emoji = "🟢"  # Green for potential buy opportunity
-                elif current_rsi > 70:
+                elif current_rsi > RSI_OVERBOUGHT_THRESHOLD:
                     rsi_status = "OVERBOUGHT"
                     alert_emoji = "🔴"  # Red for potential sell opportunity
                 
@@ -360,17 +401,18 @@ class PortfolioMACDAnalyzer:
                 print(f"❌ Error checking RSI for {stock_symbol}: {str(e)}")
                 self.rsi_alerts[stock_symbol] = "Error"
         
-        # Always send RSI status for all portfolio stocks to personal chat
-        if self.tg_bot_token and self.tg_personal_chat_ids:
+        # Always send RSI status for all portfolio stocks via email
+        if self.email_sender:
             await self.send_portfolio_rsi_status()
     
     async def send_portfolio_rsi_status(self):
-        """Always send RSI status for ALL portfolio stocks to personal chat"""
+        """Always send RSI status for ALL portfolio stocks via email"""
         if not self.rsi_alerts:
             return
         
         # Create comprehensive RSI status message for all stocks
-        message_lines = ["📊 YOUR PORTFOLIO RSI STATUS", "=" * 25]
+        subject = "📊 Portfolio RSI Status Report"
+        message_lines = ["<h2>📊 YOUR PORTFOLIO RSI STATUS</h2>", "<hr>"]
         
         oversold_count = 0
         overbought_count = 0
@@ -386,73 +428,39 @@ class PortfolioMACDAnalyzer:
                 if status == 'OVERSOLD':
                     emoji = "🟢"
                     oversold_count += 1
-                    message_lines.append(f"{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}")
-                    message_lines.append(f"   Price: {price:.2f}")
-                    message_lines.append("   💡 Potential BUY opportunity")
+                    message_lines.append(f"<h3>{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}</h3>")
+                    message_lines.append(f"<p><strong>Price:</strong> {price:.2f}</p>")
+                    message_lines.append("<p>💡 Potential BUY opportunity</p>")
                 elif status == 'OVERBOUGHT':
                     emoji = "🔴"
                     overbought_count += 1
-                    message_lines.append(f"{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}")
-                    message_lines.append(f"   Price: {price:.2f}")
-                    message_lines.append("   💡 Consider taking profits")
+                    message_lines.append(f"<h3>{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}</h3>")
+                    message_lines.append(f"<p><strong>Price:</strong> {price:.2f}</p>")
+                    message_lines.append("<p>💡 Consider taking profits</p>")
                 else:
                     emoji = "⚪"
                     neutral_count += 1
-                    message_lines.append(f"{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}")
-                    message_lines.append(f"   Price: {price:.2f}")
+                    message_lines.append(f"<h3>{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}</h3>")
+                    message_lines.append(f"<p><strong>Price:</strong> {price:.2f}</p>")
                 
-                message_lines.append("")
+                message_lines.append("<hr>")
         
         # Add summary
-        message_lines.append("📊 SUMMARY:")
-        message_lines.append(f"🟢 Oversold: {oversold_count}")
-        message_lines.append(f"🔴 Overbought: {overbought_count}")
-        message_lines.append(f"⚪ Neutral: {neutral_count}")
-        message_lines.append("")
-        message_lines.append("⚠️ Always do your own research before trading!")
+        message_lines.append("<h3>📊 SUMMARY:</h3>")
+        message_lines.append(f"<p>🟢 Oversold: {oversold_count}</p>")
+        message_lines.append(f"<p>🔴 Overbought: {overbought_count}</p>")
+        message_lines.append(f"<p>⚪ Neutral: {neutral_count}</p>")
+        message_lines.append("<hr>")
+        message_lines.append("<p><em>⚠️ Always do your own research before trading!</em></p>")
         
         message = "\n".join(message_lines)
         
-        print(f"📱 Sending complete portfolio RSI status to personal chat...")
-        await send_messages_with_bot(self.tg_bot_token, self.tg_personal_chat_ids, message)
-    
-    async def send_rsi_telegram_alerts(self, rsi_alerts):
-        """Send Telegram alerts for RSI oversold/overbought conditions (legacy function)"""
-        if not rsi_alerts:
-            return
-        
-        # Create comprehensive RSI status message
-        message_lines = ["📊 YOUR PORTFOLIO RSI STATUS", "=" * 25]
-        
-        for alert in rsi_alerts:
-            stock = alert['stock']
-            rsi = alert['rsi']
-            price = alert['price']
-            status = alert['status']
-            emoji = alert['emoji']
-            
-            message_lines.append(f"{emoji} {stock}: RSI {rsi:.1f} - {status}")
-            message_lines.append(f"   Price: {price:.2f}")
-            
-            if status == "OVERSOLD":
-                message_lines.append("   💡 Potential BUY opportunity")
-            elif status == "OVERBOUGHT":
-                message_lines.append("   💡 Consider taking profits")
-            
-            message_lines.append("")
-        
-        message_lines.append("⚠️ Always do your own research before trading!")
-        
-        message = "\n".join(message_lines)
-        
-        print(f"📱 Sending RSI alerts to personal chat...")
-        await send_messages_with_bot(self.tg_bot_token, self.tg_personal_chat_ids, message)
+        print(f"📧 Sending complete portfolio RSI status via email...")
+        self.email_sender.send_email(subject, message)
 
 class IPOChecker:
-    def __init__(self, tg_bot_token=None, tg_group_chat_ids=None, tg_personal_chat_ids=None):
-        self.tg_bot_token = tg_bot_token
-        self.tg_group_chat_ids = tg_group_chat_ids
-        self.tg_personal_chat_ids = tg_personal_chat_ids
+    def __init__(self, email_sender=None):
+        self.email_sender = email_sender
     
     def fetch_ipo_data(self) -> Dict[str, Any]:
         """
@@ -538,30 +546,31 @@ class IPOChecker:
         # If no clear indicators, return False (better to be conservative)
         return False
 
-    def format_ipo_for_telegram(self, ipo: Dict[str, Any]) -> str:
+    def format_ipo_for_email(self, ipo: Dict[str, Any]) -> str:
         """
-        Format IPO details for Telegram message
+        Format IPO details for email message
         """
-        message = f"🎯 <b>Open IPO Alert!</b>\n\n"
-        message += f"🏢 <b>Company:</b> {ipo.get('companyName', 'Unknown Company')}\n"
-        message += f"📈 <b>Symbol:</b> {ipo.get('stockSymbol', 'N/A')}\n"
-        message += f"🏭 <b>Sector:</b> {ipo.get('sectorName', 'N/A')}\n"
-        message += f"💰 <b>Price per Unit:</b> Rs. {ipo.get('pricePerUnit', 'N/A')}\n"
-        message += f"📊 <b>Min Units:</b> {ipo.get('minUnits', 'N/A')}\n"
-        message += f"📊 <b>Max Units:</b> {ipo.get('maxUnits', 'N/A')}\n"
-        message += f"💼 <b>Total Amount:</b> Rs. {ipo.get('totalAmount', 'N/A')}\n"
-        message += f"📅 <b>Opens:</b> {ipo.get('openingDateAD', 'N/A')}\n"
-        message += f"📅 <b>Closes:</b> {ipo.get('closingDateAD', 'N/A')}\n"
-        message += f"🏛️ <b>Registrar:</b> {ipo.get('shareRegistrar', 'N/A')}\n"
+        message_lines = ["<h2>🎯 Open IPO Alert!</h2>", "<hr>"]
+        message_lines.append(f"<h3>🏢 Company: {ipo.get('companyName', 'Unknown Company')}</h3>")
+        message_lines.append(f"<p><strong>📈 Symbol:</strong> {ipo.get('stockSymbol', 'N/A')}</p>")
+        message_lines.append(f"<p><strong>🏭 Sector:</strong> {ipo.get('sectorName', 'N/A')}</p>")
+        message_lines.append(f"<p><strong>💰 Price per Unit:</strong> Rs. {ipo.get('pricePerUnit', 'N/A')}</p>")
+        message_lines.append(f"<p><strong>📊 Min Units:</strong> {ipo.get('minUnits', 'N/A')}</p>")
+        message_lines.append(f"<p><strong>📊 Max Units:</strong> {ipo.get('maxUnits', 'N/A')}</p>")
+        message_lines.append(f"<p><strong>💼 Total Amount:</strong> Rs. {ipo.get('totalAmount', 'N/A')}</p>")
+        message_lines.append(f"<p><strong>📅 Opens:</strong> {ipo.get('openingDateAD', 'N/A')}</p>")
+        message_lines.append(f"<p><strong>📅 Closes:</strong> {ipo.get('closingDateAD', 'N/A')}</p>")
+        message_lines.append(f"<p><strong>🏛️ Registrar:</strong> {ipo.get('shareRegistrar', 'N/A')}</p>")
         if ipo.get('rating'):
-            message += f"⭐ <b>Rating:</b> {ipo.get('rating')}\n"
-        message += f"\n💡 <i>Don't miss this investment opportunity!</i>"
+            message_lines.append(f"<p><strong>⭐ Rating:</strong> {ipo.get('rating')}</p>")
+        message_lines.append("<hr>")
+        message_lines.append("<p><em>💡 Don't miss this investment opportunity!</em></p>")
         
-        return message
+        return "\n".join(message_lines)
 
     async def check_and_notify_ipos(self):
         """
-        Check for open IPOs and send Telegram notifications
+        Check for open IPOs and send email notifications
         """
         print("\n🔍 Checking for open IPOs...")
         print("=" * 60)
@@ -596,13 +605,13 @@ class IPOChecker:
         if open_ipos:
             print(f"🎯 Found {len(open_ipos)} open IPO(s)!")
             
-            # Send Telegram notifications for each open IPO (to all chats - both group and personal)
-            if self.tg_bot_token and (self.tg_group_chat_ids or self.tg_personal_chat_ids):
-                all_chat_ids = (self.tg_group_chat_ids or []) + (self.tg_personal_chat_ids or [])
+            # Send email notifications for each open IPO
+            if self.email_sender:
                 for ipo in open_ipos:
-                    message = self.format_ipo_for_telegram(ipo)
-                    print(f"📱 Sending IPO alert for {ipo.get('companyName', 'Unknown')}...")
-                    await send_messages_with_bot(self.tg_bot_token, all_chat_ids, message)
+                    subject = f"🎯 Open IPO Alert: {ipo.get('companyName', 'Unknown')}"
+                    message = self.format_ipo_for_email(ipo)
+                    print(f"📧 Sending IPO alert for {ipo.get('companyName', 'Unknown')}...")
+                    self.email_sender.send_email(subject, message)
             
             # Display details in console
             for i, ipo in enumerate(open_ipos, 1):
@@ -774,15 +783,15 @@ def calculate_rsi_for_general_stocks(data, period=14):
 
 def get_rsi_status_emoji(rsi_value):
     """Get RSI status and emoji based on RSI value"""
-    if rsi_value < 30:
+    if rsi_value < RSI_OVERSOLD_THRESHOLD:
         return "OVERSOLD", "🟢"
-    elif rsi_value > 70:
+    elif rsi_value > RSI_OVERBOUGHT_THRESHOLD:
         return "OVERBOUGHT", "🔴"
     else:
         return "NEUTRAL", "⚪"
 
 
-async def detect_intersections(data, company_symbol, signal_date, tg_bot_token, tg_group_chat_ids):
+async def detect_intersections(data, company_symbol, signal_date, email_sender):
     """Function to detect MACD crossovers and print signals with RSI information"""
     intersections = []
     
@@ -814,35 +823,30 @@ async def detect_intersections(data, company_symbol, signal_date, tg_bot_token, 
             # Get RSI status and emoji
             rsi_status, rsi_emoji = get_rsi_status_emoji(current_rsi)
             
-            # Choose color based on signal type
-            if signal_type == "Buy Signal":
-                signal_color = "\033[92m"  # Green for Buy Signal
-            elif signal_type == "Sell Signal":
-                signal_color = "\033[91m"  # Red for Sell Signal
-            else:
-                signal_color = "\033[0m"  # Default (no color)
-
-            symbol_color = "\033[94m\033[1m"  # Blue and bold for company symbol
-            reset_color = "\033[0m"  # Reset to default color
-
             # Enhanced print statement with RSI information
             print(f"\n\n{signal_type}: {company_symbol} | RSI: {current_rsi:.1f} {rsi_emoji} {rsi_status} | Price: {current_price:.2f} ({intersection_date.strftime('%Y-%m-%d')})")
         
-            # Enhanced message with RSI information for Telegram
-            message = f"{signal_type}: RSI {current_rsi:.1f} {rsi_emoji}: Price: {current_price:.2f} & {company_symbol}"
-
-            # Send Telegram message
-            await send_messages_with_bot(tg_bot_token, tg_group_chat_ids, message)
+            # Send email notification for general stock signals
+            if email_sender:
+                template = EMAIL_TEMPLATES["general_signal"]
+                subject = f"{template['subject_prefix']}: {company_symbol}"
+                message = template["body_template"].format(
+                    signal_type=signal_type,
+                    stock_symbol=company_symbol,
+                    rsi=current_rsi,
+                    rsi_emoji=rsi_emoji,
+                    rsi_status=rsi_status,
+                    price=current_price,
+                    date=intersection_date.strftime('%Y-%m-%d'),
+                    macd=macd_val,
+                    signal=signal_val
+                )
+                email_sender.send_email(subject, message)
 
     return intersections
 
 
-async def send_messages_with_bot(bot_token, group_chat_ids, message):
-    bot_sender = BotTelegramSender(bot_token, group_chat_ids)
-    try:
-        await bot_sender.send_message(message)
-    except Exception as e:
-        print(f"Error while trying to send message: {str(e)}")
+
 
 async def main():
     # Group ID finder mode - uncomment to help find your group ID
@@ -888,20 +892,10 @@ async def main():
     signal_date = datetime.today().strftime('%Y-%m-%d')  # Format: 'YYYY-MM-DD'
     # signal_date = "2025-06-08"  # Uncomment to use a specific date
 
-    # Get credentials from environment variables (for GitHub Actions) or use defaults for local testing
-    tg_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+    # Initialize email sender using configuration
+    email_sender = EmailSender()
     
-    # Group chat IDs (for general stock signals, no personal portfolio alerts)
-    tg_group_chat_ids_str = os.getenv("TELEGRAM_GROUP_CHAT_IDS", "-1002500595333")
-    tg_group_chat_ids = [chat_id.strip() for chat_id in tg_group_chat_ids_str.split(",")]
-    
-    # Personal chat IDs (for all alerts including personal portfolio)
-    tg_personal_chat_ids_str = os.getenv("TELEGRAM_PERSONAL_CHAT_IDS", "6595074511")
-    tg_personal_chat_ids = [chat_id.strip() for chat_id in tg_personal_chat_ids_str.split(",")]
-    
-    # Combined chat IDs for general stock signals (both group and personal)
-    tg_all_chat_ids = tg_group_chat_ids + tg_personal_chat_ids
-
+    # Set up headers for data fetching
     base_url = "https://www.sharesansar.com/company/nhpc"
     headers = {
         'accept': 'application/json, text/javascript, */*; q=0.01',
@@ -963,15 +957,15 @@ async def main():
         # Calculate MACD and Signal line
         macd_data = calculate_macd(data)
 
-        # Detect intersections and print signals (send to all chats - both group and personal)
-        await detect_intersections(macd_data, company_symbol, signal_date, tg_bot_token, tg_all_chat_ids)
+        # Detect intersections and print signals (send via email)
+        await detect_intersections(macd_data, company_symbol, signal_date, email_sender)
 
     print("\n" + "="*60)
     print("PHASE 2: Personal Portfolio Analysis")
     print("="*60)
     
-    # Initialize and run portfolio analysis with Telegram credentials
-    portfolio_analyzer = PortfolioMACDAnalyzer(tg_bot_token, tg_group_chat_ids, tg_personal_chat_ids)
+    # Initialize and run portfolio analysis with email sender
+    portfolio_analyzer = PortfolioMACDAnalyzer(email_sender)
     
     # Analyze MACD signals for portfolio (now async)
     await portfolio_analyzer.analyze_portfolio_macd_signals()
@@ -990,14 +984,14 @@ async def main():
     print("="*60)
     
     # Initialize and run IPO checker
-    ipo_checker = IPOChecker(tg_bot_token, tg_group_chat_ids, tg_personal_chat_ids)
+    ipo_checker = IPOChecker(email_sender)
     
     # Check for open IPOs and send notifications
     await ipo_checker.check_and_notify_ipos()
     
     print("\n🎉 Complete Analysis Finished!")
     print("✅ MACD signals analyzed and updated in 'my_portfolio.csv'")
-    print("📱 Portfolio alerts sent to Telegram if signals detected!")
+    print("📧 Portfolio alerts sent to email if signals detected!")
     print("🎯 IPO opportunities checked and notified if available!")
 
 if __name__ == "__main__":
