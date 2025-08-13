@@ -4295,6 +4295,11 @@
         "companyname": "NIC Asia Capital Limited"
     },
     {
+        "id": 1589,
+        "symbol": "NICAD2091",
+        "companyname": "7% NIC Asia Debenture 2091"
+    },
+    {
         "id": 857,
         "symbol": "NICAD8182",
         "companyname": "9% NIC Asia Debenture 2081/82"
@@ -4308,11 +4313,6 @@
         "id": 1491,
         "symbol": "NICAD85/86",
         "companyname": "10% NIC Asia Debenture 2085/86"
-    },
-    {
-        "id": 1589,
-        "symbol": "NICAD91",
-        "companyname": "7% NIC Asia Debenture 2091"
     },
     {
         "id": 1462,
