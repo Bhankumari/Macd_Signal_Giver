@@ -1585,6 +1585,11 @@
         "companyname": "Global IME Bank Limited Promoter Share"
     },
     {
+        "id": 1273,
+        "symbol": "GBIMESY2",
+        "companyname": "Global IME Samunnat Yojana -II"
+    },
+    {
         "id": 21,
         "symbol": "GBL",
         "companyname": "Global Bank Limited"
@@ -1713,11 +1718,6 @@
         "id": 597,
         "symbol": "GIMES1",
         "companyname": "Global IME Samunnat Scheme 1"
-    },
-    {
-        "id": 1273,
-        "symbol": "GIMES2",
-        "companyname": "Global IME Samunnat Yojana -II"
     },
     {
         "id": 1544,
@@ -4108,6 +4108,11 @@
         "id": 964,
         "symbol": "NESDO",
         "companyname": "Nesdo Sambridha Laghubitta Bittiya Sanstha Limited"
+    },
+    {
+        "id": 1614,
+        "symbol": "NEXGEN",
+        "companyname": "NexGen Management & Equity Solutions"
     },
     {
         "id": 1114,
