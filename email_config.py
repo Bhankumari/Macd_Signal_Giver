@@ -17,6 +17,13 @@ SMTP_EMAIL = "adwinlamal@gmail.com"
 SMTP_PASSWORD = "vjbp zwtf smof dlun"  # Gmail App Password
 RECIPIENT_EMAIL = "balaramlamsal137@gmail.com"
 
+# Optional: multiple recipients (To). The app will send to all listed here.
+# Keep RECIPIENT_EMAIL for backward compatibility.
+RECIPIENT_EMAILS = [
+    "balaramlamsal137@gmail.com",
+    "punarkarki9@gmail.com",
+]
+
 # SMTP Server Settings
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587

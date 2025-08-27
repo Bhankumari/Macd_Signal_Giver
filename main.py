@@ -13,14 +13,25 @@ from email.mime.multipart import MIMEMultipart
 from typing import Dict, List, Any
 from email_config import (
     SMTP_EMAIL, SMTP_PASSWORD, RECIPIENT_EMAIL, SMTP_SERVER, SMTP_PORT,
-    PORTFOLIO_STOCKS, EMAIL_TEMPLATES, RSI_OVERSOLD_THRESHOLD, RSI_OVERBOUGHT_THRESHOLD
+    PORTFOLIO_STOCKS, EMAIL_TEMPLATES, RSI_OVERSOLD_THRESHOLD, RSI_OVERBOUGHT_THRESHOLD,
+    RECIPIENT_EMAILS
 )
 
 class EmailSender:
-    def __init__(self, smtp_email=None, smtp_password=None, recipient_email=None):
+    def __init__(self, smtp_email=None, smtp_password=None, recipient_email=None, recipient_emails=None):
         self.smtp_email = smtp_email or SMTP_EMAIL
         self.smtp_password = smtp_password or SMTP_PASSWORD
-        self.recipient_email = recipient_email or RECIPIENT_EMAIL
+        # Backward-compatible single recipient
+        single_recipient = recipient_email or RECIPIENT_EMAIL
+        # Preferred multiple recipients list
+        configured_recipients = RECIPIENT_EMAILS if isinstance(RECIPIENT_EMAILS, list) else []
+        # Allow override via arg
+        if recipient_emails is not None:
+            configured_recipients = recipient_emails if isinstance(recipient_emails, list) else [recipient_emails]
+        # Fallback to single if list empty
+        self.recipient_emails = configured_recipients or ([single_recipient] if single_recipient else [])
+        # Expose first recipient for existing prints/tests
+        self.recipient_email = self.recipient_emails[0] if self.recipient_emails else ""
         self.smtp_server = SMTP_SERVER
         self.smtp_port = SMTP_PORT
     
@@ -30,7 +41,7 @@ class EmailSender:
             # Create message
             msg = MIMEMultipart()
             msg['From'] = self.smtp_email
-            msg['To'] = self.recipient_email
+            msg['To'] = ", ".join(self.recipient_emails) if self.recipient_emails else self.recipient_email
             msg['Subject'] = subject
             
             # Add body to email
@@ -43,10 +54,11 @@ class EmailSender:
             
             # Send email
             text = msg.as_string()
-            server.sendmail(self.smtp_email, self.recipient_email, text)
+            to_addresses = self.recipient_emails if self.recipient_emails else [self.recipient_email]
+            server.sendmail(self.smtp_email, to_addresses, text)
             server.quit()
             
-            print(f"📧 Email sent successfully to {self.recipient_email}")
+            print(f"📧 Email sent successfully to {', '.join(to_addresses)}")
             return True
             
         except Exception as e:
