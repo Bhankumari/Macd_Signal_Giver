@@ -455,6 +455,11 @@
         "companyname": "Baibhava Finance Limited"
     },
     {
+        "id": 1616,
+        "symbol": "BAJEKO",
+        "companyname": "Bajeko Sekuwa Limited"
+    },
+    {
         "id": 493,
         "symbol": "BARUN",
         "companyname": "Barun Hydropower Company Limited"
@@ -2110,6 +2115,11 @@
         "companyname": "Him River Power Limited"
     },
     {
+        "id": 1298,
+        "symbol": "HIMSTAR",
+        "companyname": "Him Star Urja Company Limited"
+    },
+    {
         "id": 427,
         "symbol": "HLBSL",
         "companyname": "Himalayan Laghubitta Bittiya Sanstha Limited (Former Civil Laghubitta)"
@@ -2178,11 +2188,6 @@
         "id": 1487,
         "symbol": "HSL",
         "companyname": "Himalayan Securities Limited"
-    },
-    {
-        "id": 1298,
-        "symbol": "HSUCL",
-        "companyname": "Him Star Urja Company Limited"
     },
     {
         "id": 1346,
