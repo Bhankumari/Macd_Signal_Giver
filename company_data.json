@@ -230,6 +230,11 @@
         "companyname": "Nepal Agro Laghubitta Bittiya Sanstha Limited Promoter Share"
     },
     {
+        "id": 1617,
+        "symbol": "AHCL",
+        "companyname": "Api Holdings Company Limited"
+    },
+    {
         "id": 1010,
         "symbol": "AHL",
         "companyname": "Asian Hydropower Limited"
@@ -7168,6 +7173,11 @@
         "id": 587,
         "symbol": "TDBLPO",
         "companyname": "Tourism Development Bank Limited Promoter Share"
+    },
+    {
+        "id": 1618,
+        "symbol": "TEAM",
+        "companyname": "Team Ventures Limited"
     },
     {
         "id": 1611,
