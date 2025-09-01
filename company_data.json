@@ -1000,11 +1000,6 @@
         "companyname": "Citizen Investment Trust Promoter Share"
     },
     {
-        "id": 1530,
-        "symbol": "CITSY",
-        "companyname": "Citizens Sadabahar Yojana"
-    },
-    {
         "id": 1166,
         "symbol": "CITY",
         "companyname": "City Hotel Limited"
@@ -1146,8 +1141,13 @@
     },
     {
         "id": 1575,
-        "symbol": "CSY",
+        "symbol": "CSTY",
         "companyname": "Citizens Santulit Yojana"
+    },
+    {
+        "id": 1530,
+        "symbol": "CSY",
+        "companyname": "Citizens Sadabahar Yojana"
     },
     {
         "id": 311,
@@ -1488,6 +1488,11 @@
         "id": 112,
         "symbol": "FHL",
         "companyname": "Fleur Himalayan Limited"
+    },
+    {
+        "id": 1619,
+        "symbol": "FLLTD",
+        "companyname": "Florid Laboratories Limited"
     },
     {
         "id": 392,
