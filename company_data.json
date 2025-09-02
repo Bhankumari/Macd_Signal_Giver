@@ -3630,6 +3630,11 @@
         "companyname": "Muktinath Mutual Fund 1"
     },
     {
+        "id": 1623,
+        "symbol": "MNMF2",
+        "companyname": "Muktinath Mutual Fund 2"
+    },
+    {
         "id": 920,
         "symbol": "MOPL",
         "companyname": "Molniya Power Limited"
@@ -4160,6 +4165,11 @@
         "companyname": "Nilgiri Bikas Bank Limited"
     },
     {
+        "id": 1622,
+        "symbol": "NGF",
+        "companyname": "Nabil Growth Fund"
+    },
+    {
         "id": 1018,
         "symbol": "NGHCL",
         "companyname": "Nalgad Hydropower Company Limited"
@@ -4523,6 +4533,11 @@
         "id": 593,
         "symbol": "NLCL",
         "companyname": "Nepal Life Capital Limited (Former National Merchant Banker Limited)"
+    },
+    {
+        "id": 1620,
+        "symbol": "NLCLTD",
+        "companyname": "Nepal Life Investment Company Limited"
     },
     {
         "id": 364,
@@ -6978,6 +6993,11 @@
         "id": 1518,
         "symbol": "SSEHL",
         "companyname": "Shree Sasha Engineering Hydropower Limited"
+    },
+    {
+        "id": 1621,
+        "symbol": "SSHIL",
+        "companyname": "Shiva Shankar Hydro Investment Limited"
     },
     {
         "id": 740,
