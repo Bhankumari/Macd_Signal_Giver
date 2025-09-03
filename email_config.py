@@ -100,6 +100,8 @@ PORTFOLIO_STOCKS = ['CFCL', 'JFL', 'PFL', 'ICFC', 'JFL', 'BFC']
 # RSI Thresholds
 RSI_OVERSOLD_THRESHOLD = 30
 RSI_OVERBOUGHT_THRESHOLD = 70
+# Additional alert threshold for general stocks RSI low alerts
+RSI_LOW_ALERT_THRESHOLD = 35
 
 # MACD Settings
 MACD_SHORT_WINDOW = 12

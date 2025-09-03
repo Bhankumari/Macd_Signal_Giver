@@ -14,7 +14,7 @@ from typing import Dict, List, Any
 from email_config import (
     SMTP_EMAIL, SMTP_PASSWORD, RECIPIENT_EMAIL, SMTP_SERVER, SMTP_PORT,
     PORTFOLIO_STOCKS, EMAIL_TEMPLATES, RSI_OVERSOLD_THRESHOLD, RSI_OVERBOUGHT_THRESHOLD,
-    RECIPIENT_EMAILS
+    RECIPIENT_EMAILS, RSI_LOW_ALERT_THRESHOLD
 )
 
 class EmailSender:
@@ -855,12 +855,13 @@ async def detect_intersections(data, company_symbol, signal_date, email_sender):
     return intersections, signals_found
 
 
-async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=None):
+async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=None, low_rsi_alerts=None):
     """Send a summary email with all MACD signals found and IPO alerts"""
     has_signals = all_signals and len(all_signals) > 0
     has_ipos = ipo_alerts and len(ipo_alerts) > 0
+    has_low_rsi = low_rsi_alerts and len(low_rsi_alerts) > 0
     
-    if not has_signals and not has_ipos:
+    if not has_signals and not has_ipos and not has_low_rsi:
         return
     
     # Count signals by type
@@ -905,6 +906,17 @@ async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=
                 message_lines.append(f"<p><strong>Signal Line:</strong> {signal['signal']:.4f}</p>")
                 message_lines.append("<hr>")
     
+    if has_low_rsi:
+        message_lines.extend([
+            f"<h2>🟢 RSI Opportunities (RSI < {RSI_LOW_ALERT_THRESHOLD})</h2>",
+            f"<p><strong>Stocks:</strong> {len(low_rsi_alerts)}</p>",
+            "<hr>"
+        ])
+        for item in low_rsi_alerts:
+            message_lines.append(f"<h3>🟢 {item['stock_symbol']}: RSI {item['rsi']:.1f}</h3>")
+            message_lines.append(f"<p><strong>Price:</strong> {item['price']:.2f}</p>")
+            message_lines.append("<hr>")
+
     if has_ipos:
         message_lines.extend([
             f"<h2>🎯 IPO Opportunities</h2>",
@@ -931,7 +943,11 @@ async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=
     
     message = "\n".join(message_lines)
     
-    total_items = len(all_signals) + len(ipo_alerts) if ipo_alerts else len(all_signals)
+    total_items = (
+        (len(all_signals) if all_signals else 0)
+        + (len(ipo_alerts) if ipo_alerts else 0)
+        + (len(low_rsi_alerts) if low_rsi_alerts else 0)
+    )
     print(f"📧 Sending summary email with {total_items} total items...")
     email_sender.send_email(subject, message)
 
@@ -1014,6 +1030,8 @@ async def main():
 
     # Collect all signals for batch email
     all_signals = []
+    # Collect low RSI alerts across all general stocks
+    low_rsi_alerts = []
 
     for company in filtered_data:
         company_id = company["id"]
@@ -1047,6 +1065,18 @@ async def main():
 
         # Calculate MACD and Signal line
         macd_data = calculate_macd(data)
+
+        # Calculate RSI and collect low RSI alerts
+        rsi_series = calculate_rsi_for_general_stocks(macd_data)
+        if not rsi_series.empty and not pd.isna(rsi_series.iloc[-1]):
+            latest_rsi = float(rsi_series.iloc[-1])
+            latest_price = float(macd_data['close'].iloc[-1])
+            if latest_rsi < RSI_LOW_ALERT_THRESHOLD:
+                low_rsi_alerts.append({
+                    'stock_symbol': company_symbol,
+                    'rsi': latest_rsi,
+                    'price': latest_price
+                })
 
         # Detect intersections and collect signals
         intersections, signals_found = await detect_intersections(macd_data, company_symbol, signal_date, email_sender)
@@ -1085,9 +1115,9 @@ async def main():
     # Check for open IPOs and collect alerts
     ipo_alerts = await ipo_checker.check_and_notify_ipos()
     
-    # Send summary email with all signals and IPO alerts
-    if (all_signals or ipo_alerts) and email_sender:
-        await send_summary_email(all_signals, email_sender, signal_date, ipo_alerts)
+    # Send summary email with all signals, IPO alerts, and low RSI opportunities
+    if (all_signals or ipo_alerts or low_rsi_alerts) and email_sender:
+        await send_summary_email(all_signals, email_sender, signal_date, ipo_alerts, low_rsi_alerts)
     
     print("\n🎉 Complete Analysis Finished!")
     print("✅ MACD signals analyzed and updated in 'my_portfolio.csv'")
