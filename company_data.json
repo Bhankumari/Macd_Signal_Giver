@@ -4365,11 +4365,6 @@
         "companyname": "10% NIC Asia Debenture 2085/86"
     },
     {
-        "id": 1462,
-        "symbol": "NICAELIS",
-        "companyname": "NIC ASIA Equity Linked Investment Scheme"
-    },
-    {
         "id": 461,
         "symbol": "NICAP",
         "companyname": "NICA Bank Limited Promoter share"
@@ -4403,6 +4398,11 @@
         "id": 1101,
         "symbol": "NICD88",
         "companyname": "8.5% NIC Asia Debenture 2088"
+    },
+    {
+        "id": 1462,
+        "symbol": "NICELIS",
+        "companyname": "NIC ASIA Equity Linked Investment Scheme"
     },
     {
         "id": 1115,
