@@ -1712,7 +1712,7 @@
     {
         "id": 686,
         "symbol": "GIBF1",
-        "companyname": "Global IME Balance Fund-I"
+        "companyname": "Global IME Balanced Fund-I"
     },
     {
         "id": 676,
@@ -3978,6 +3978,11 @@
         "id": 784,
         "symbol": "NBSS",
         "companyname": "Nepal Bittiya Sanstha Sangh"
+    },
+    {
+        "id": 1629,
+        "symbol": "NBTL",
+        "companyname": "National Bio Tech Limited"
     },
     {
         "id": 409,
