@@ -3,10 +3,12 @@ import json
 import csv
 import pandas as pd
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import asyncio
 import aiohttp
 import os
+import sys
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -84,7 +86,10 @@ class PortfolioMACDAnalyzer:
     
     async def analyze_portfolio_macd_signals(self):
         """Analyze MACD signals for all stocks in portfolio"""
-        signal_date = datetime.today().strftime('%Y-%m-%d')
+        # Use previous Kathmandu day (market last closed day) for signal detection
+        ktm_today = datetime.now(ZoneInfo("Asia/Kathmandu")).date()
+        prev_trading_day = (ktm_today - timedelta(days=1)).strftime('%Y-%m-%d')
+        signal_date = prev_trading_day
         
         print(f"\n🔍 Analyzing Portfolio MACD signals for {signal_date}...")
         print("=" * 60)
@@ -117,13 +122,17 @@ class PortfolioMACDAnalyzer:
                 # Calculate MACD
                 macd_data = calculate_macd(data)
                 
-                # Check for recent crossovers (last 5 days)
+                # Check for recent crossovers (last 5 days), then filter to only today's date
                 recent_signals = self.detect_recent_crossovers(macd_data, stock_symbol)
-                self.macd_signals[stock_symbol] = recent_signals
+                if isinstance(recent_signals, list) and recent_signals:
+                    todays_signals = [s for s in recent_signals if s.get('date').strftime('%Y-%m-%d') == signal_date]
+                    self.macd_signals[stock_symbol] = todays_signals if todays_signals else "No Recent Signals"
+                else:
+                    self.macd_signals[stock_symbol] = recent_signals
                 
-                # If signals found, add to portfolio signals list
-                if isinstance(recent_signals, list) and len(recent_signals) > 0:
-                    for signal in recent_signals:
+                # If today's signals found, add to portfolio signals list
+                if isinstance(self.macd_signals[stock_symbol], list) and len(self.macd_signals[stock_symbol]) > 0:
+                    for signal in self.macd_signals[stock_symbol]:
                         portfolio_signals_found.append({
                             'stock': stock_symbol,
                             'signal': signal
@@ -993,7 +1002,9 @@ async def main():
             return
 
     
-    signal_date = datetime.today().strftime('%Y-%m-%d')  # Format: 'YYYY-MM-DD'
+    # Use Kathmandu time for determining the analysis date
+    ktm_now = datetime.now(ZoneInfo("Asia/Kathmandu"))
+    signal_date = ktm_now.strftime('%Y-%m-%d')  # Format: 'YYYY-MM-DD'
     # signal_date = "2025-06-08"  # Uncomment to use a specific date
 
     # Initialize email sender using configuration
@@ -1016,7 +1027,7 @@ async def main():
 
     print("🚀 Starting MACD Signal Analysis...")
     print("="*60)
-    print("PHASE 1: General Stock Analysis")
+    print("PHASE 1: General Stock Analysis (emails disabled)")
     print("="*60)
 
     # Load stock symbols from CSV
@@ -1028,9 +1039,8 @@ async def main():
     # Filter company data
     filtered_data = load_company_data("company_data.json", stock_list)
 
-    # Collect all signals for batch email
+    # Collectors retained but emails are disabled below
     all_signals = []
-    # Collect low RSI alerts across all general stocks
     low_rsi_alerts = []
 
     for company in filtered_data:
@@ -1038,8 +1048,8 @@ async def main():
         company_symbol = company["symbol"].replace('/', '-')
 
         # Fetch and update price history!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        new_data = price_history(headers, company_id)
-        update_csv(company_symbol, new_data)
+        # new_data = price_history(headers, company_id)
+        # update_csv(company_symbol, new_data)
 
         # Detect MACD signal code from here
         file_path = f"data/{company_symbol}.csv"
@@ -1078,22 +1088,22 @@ async def main():
                     'price': latest_price
                 })
 
-        # Detect intersections and collect signals
+        # Detect intersections and collect signals (emails disabled later)
         intersections, signals_found = await detect_intersections(macd_data, company_symbol, signal_date, email_sender)
         all_signals.extend(signals_found)
 
     print("\n" + "="*60)
-    print("PHASE 2: Personal Portfolio Analysis")
+    print("PHASE 2: Personal Portfolio Analysis (only today's MACD cross emails)")
     print("="*60)
     
     # Initialize and run portfolio analysis with email sender
     portfolio_analyzer = PortfolioMACDAnalyzer(email_sender)
     
-    # Analyze MACD signals for portfolio (now async)
+    # Analyze MACD signals for portfolio (only today's)
     portfolio_signals = await portfolio_analyzer.analyze_portfolio_macd_signals()
     
-    # Check RSI levels for personal stocks
-    await portfolio_analyzer.check_personal_stocks_rsi()
+    # Skip sending RSI status emails
+    # await portfolio_analyzer.check_personal_stocks_rsi()
     
     # Display detailed portfolio analysis
     portfolio_analyzer.display_portfolio_analysis()
@@ -1106,23 +1116,39 @@ async def main():
         all_signals.extend(portfolio_signals)
     
     print("\n" + "="*60)
-    print("PHASE 3: IPO Opportunity Check")
+    print("PHASE 3: IPO Opportunity Check (disabled)")
     print("="*60)
-    
-    # Initialize and run IPO checker
-    ipo_checker = IPOChecker(email_sender)
-    
-    # Check for open IPOs and collect alerts
-    ipo_alerts = await ipo_checker.check_and_notify_ipos()
-    
-    # Send summary email with all signals, IPO alerts, and low RSI opportunities
-    if (all_signals or ipo_alerts or low_rsi_alerts) and email_sender:
-        await send_summary_email(all_signals, email_sender, signal_date, ipo_alerts, low_rsi_alerts)
+    ipo_alerts = []
+    # Skipping IPO checks and summary emails to only send portfolio MACD cross emails
     
     print("\n🎉 Complete Analysis Finished!")
     print("✅ MACD signals analyzed and updated in 'my_portfolio.csv'")
-    print("📧 Summary email sent with all signals!")
-    print("🎯 IPO opportunities checked and notified if available!")
+    print("📧 Only portfolio MACD cross emails were sent (today's signals only)")
+    print("🎯 IPO checks and other emails are disabled as requested")
+
+async def run_daily_at_kathmandu_11am():
+    """Run the analysis every day at 11:00 Asia/Kathmandu time."""
+    tz = ZoneInfo("Asia/Kathmandu")
+    while True:
+        now_ktm = datetime.now(tz)
+        target_time_today = now_ktm.replace(hour=11, minute=0, second=0, microsecond=0)
+        if now_ktm <= target_time_today:
+            next_run = target_time_today
+        else:
+            next_run = (now_ktm + timedelta(days=1)).replace(hour=11, minute=0, second=0, microsecond=0)
+        wait_seconds = max(0, (next_run - now_ktm).total_seconds())
+        print(f"⏳ Waiting {int(wait_seconds)}s until 11:00 Asia/Kathmandu ({next_run.strftime('%Y-%m-%d %H:%M:%S %Z')})...")
+        await asyncio.sleep(wait_seconds)
+        try:
+            await main()
+        except Exception as e:
+            print(f"❌ Error during scheduled run: {e}")
+        # small delay to avoid immediate re-run if clock boundary is tight
+        await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Run immediately once if flag/env provided, otherwise schedule daily at 11:00 KTM
+    if ("--now" in sys.argv) or (os.getenv("RUN_ONCE_NOW") == "1"):
+        asyncio.run(main())
+    else:
+        asyncio.run(run_daily_at_kathmandu_11am())
