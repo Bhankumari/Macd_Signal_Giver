@@ -14,8 +14,7 @@ from email.mime.multipart import MIMEMultipart
 from typing import Dict, List, Any
 from email_config import (
     SMTP_EMAIL, SMTP_PASSWORD, RECIPIENT_EMAIL, SMTP_SERVER, SMTP_PORT,
-    PORTFOLIO_STOCKS, EMAIL_TEMPLATES, RSI_OVERSOLD_THRESHOLD, RSI_OVERBOUGHT_THRESHOLD,
-    RECIPIENT_EMAILS, RSI_LOW_ALERT_THRESHOLD
+    PORTFOLIO_STOCKS, EMAIL_TEMPLATES, RECIPIENT_EMAILS
 )
 
 class EmailSender:
@@ -71,7 +70,6 @@ class PortfolioMACDAnalyzer:
         self.my_stocks = PORTFOLIO_STOCKS
         self.portfolio_data = []
         self.macd_signals = {}
-        self.rsi_alerts = {}
         self.email_sender = email_sender
         
     def load_portfolio_from_csv(self, filename='my_portfolio.csv'):
@@ -227,22 +225,6 @@ class PortfolioMACDAnalyzer:
             print(f"\n📈 {stock}")
             print(f"   Balance: {balance} | LTP: {ltp} | Value: {value_ltp}")
             
-            # Check RSI status
-            if stock in self.rsi_alerts:
-                rsi_info = self.rsi_alerts[stock]
-                if isinstance(rsi_info, dict):
-                    rsi_value = rsi_info['rsi']
-                    rsi_status = rsi_info['status']
-                    
-                    if rsi_status == 'OVERSOLD':
-                        print(f"   🟢 RSI: {rsi_value:.1f} - OVERSOLD (Buy opportunity)")
-                    elif rsi_status == 'OVERBOUGHT':
-                        print(f"   🔴 RSI: {rsi_value:.1f} - OVERBOUGHT (Consider selling)")
-                    else:
-                        print(f"   ⚪ RSI: {rsi_value:.1f} - NEUTRAL")
-                else:
-                    print(f"   ⚠️  RSI: {rsi_info}")
-            
             # Check MACD signals
             if stock in self.macd_signals:
                 signals = self.macd_signals[stock]
@@ -309,333 +291,6 @@ class PortfolioMACDAnalyzer:
         except Exception as e:
             print(f"❌ Error updating CSV: {str(e)}")
 
-    def calculate_rsi(self, data, period=14):
-        """
-        Calculate RSI using Wilder's smoothing method (the correct/standard way)
-        This matches what you see on TradingView, Yahoo Finance, etc.
-        """
-        close_prices = data['close'].copy()
-        
-        # Calculate price changes
-        delta = close_prices.diff()
-        
-        # Separate gains and losses
-        gains = delta.where(delta > 0, 0)
-        losses = -delta.where(delta < 0, 0)
-        
-        # Calculate the first averages using simple moving average
-        avg_gain = gains.rolling(window=period).mean()
-        avg_loss = losses.rolling(window=period).mean()
-        
-        # Apply Wilder's smoothing for subsequent values
-        for i in range(period, len(gains)):
-            avg_gain.iloc[i] = (avg_gain.iloc[i-1] * (period - 1) + gains.iloc[i]) / period
-            avg_loss.iloc[i] = (avg_loss.iloc[i-1] * (period - 1) + losses.iloc[i]) / period
-        
-        # Calculate RS and RSI
-        rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-        
-        return rsi
-    
-    async def check_personal_stocks_rsi(self):
-        """Check RSI levels for personal stocks and alert if oversold/overbought"""
-        print(f"\n📊 Checking RSI levels for personal stocks...")
-        print("=" * 60)
-        
-        rsi_alerts = []
-        
-        for stock_symbol in self.my_stocks:
-            try:
-                file_path = f"data/{stock_symbol}.csv"
-                
-                if not os.path.exists(file_path):
-                    print(f"⚠️  No data file found for {stock_symbol}")
-                    continue
-                
-                # Load and process data
-                data = pd.read_csv(file_path)
-                data.columns = [col.lower() for col in data.columns]
-                data = data[['published_date', 'close']]
-                data['published_date'] = pd.to_datetime(data['published_date'])
-                data['close'] = pd.to_numeric(data['close'], errors='coerce')
-                data = data.dropna(subset=['close'])
-                data = data.sort_values(by='published_date')
-                
-                if len(data) < 14:  # Need at least 14 data points for RSI
-                    print(f"⚠️  Insufficient data for {stock_symbol} RSI (need 14+ points, have {len(data)})")
-                    continue
-                
-                # Calculate RSI
-                rsi = self.calculate_rsi(data)
-                current_rsi = rsi.iloc[-1]
-                current_price = data['close'].iloc[-1]
-                
-                # Check for oversold or overbought conditions
-                rsi_status = None
-                alert_emoji = ""
-                
-                if current_rsi < RSI_OVERSOLD_THRESHOLD:
-                    rsi_status = "OVERSOLD"
-                    alert_emoji = "🟢"  # Green for potential buy opportunity
-                elif current_rsi > RSI_OVERBOUGHT_THRESHOLD:
-                    rsi_status = "OVERBOUGHT"
-                    alert_emoji = "🔴"  # Red for potential sell opportunity
-                
-                # Always show RSI value for personal stocks
-                print(f"📈 {stock_symbol}: RSI = {current_rsi:.1f} | Price = {current_price:.2f}", end="")
-                
-                if rsi_status:
-                    print(f" {alert_emoji} {rsi_status}")
-                    rsi_alerts.append({
-                        'stock': stock_symbol,
-                        'rsi': current_rsi,
-                        'price': current_price,
-                        'status': rsi_status,
-                        'emoji': alert_emoji
-                    })
-                else:
-                    print(" ⚪ NEUTRAL")
-                
-                self.rsi_alerts[stock_symbol] = {
-                    'rsi': current_rsi,
-                    'price': current_price,
-                    'status': rsi_status or 'NEUTRAL'
-                }
-                
-            except Exception as e:
-                print(f"❌ Error checking RSI for {stock_symbol}: {str(e)}")
-                self.rsi_alerts[stock_symbol] = "Error"
-        
-        # Always send RSI status for all portfolio stocks via email
-        if self.email_sender:
-            await self.send_portfolio_rsi_status()
-    
-    async def send_portfolio_rsi_status(self):
-        """Always send RSI status for ALL portfolio stocks via email"""
-        if not self.rsi_alerts:
-            return
-        
-        # Create comprehensive RSI status message for all stocks
-        subject = "📊 Portfolio RSI Status Report"
-        message_lines = ["<h2>📊 YOUR PORTFOLIO RSI STATUS</h2>", "<hr>"]
-        
-        oversold_count = 0
-        overbought_count = 0
-        neutral_count = 0
-        
-        for stock_symbol in self.my_stocks:
-            if stock_symbol in self.rsi_alerts and isinstance(self.rsi_alerts[stock_symbol], dict):
-                rsi_info = self.rsi_alerts[stock_symbol]
-                rsi = rsi_info['rsi']
-                price = rsi_info['price']
-                status = rsi_info['status']
-                
-                if status == 'OVERSOLD':
-                    emoji = "🟢"
-                    oversold_count += 1
-                    message_lines.append(f"<h3>{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}</h3>")
-                    message_lines.append(f"<p><strong>Price:</strong> {price:.2f}</p>")
-                    message_lines.append("<p>💡 Potential BUY opportunity</p>")
-                elif status == 'OVERBOUGHT':
-                    emoji = "🔴"
-                    overbought_count += 1
-                    message_lines.append(f"<h3>{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}</h3>")
-                    message_lines.append(f"<p><strong>Price:</strong> {price:.2f}</p>")
-                    message_lines.append("<p>💡 Consider taking profits</p>")
-                else:
-                    emoji = "⚪"
-                    neutral_count += 1
-                    message_lines.append(f"<h3>{emoji} {stock_symbol}: RSI {rsi:.1f} - {status}</h3>")
-                    message_lines.append(f"<p><strong>Price:</strong> {price:.2f}</p>")
-                
-                message_lines.append("<hr>")
-        
-        # Add summary
-        message_lines.append("<h3>📊 SUMMARY:</h3>")
-        message_lines.append(f"<p>🟢 Oversold: {oversold_count}</p>")
-        message_lines.append(f"<p>🔴 Overbought: {overbought_count}</p>")
-        message_lines.append(f"<p>⚪ Neutral: {neutral_count}</p>")
-        message_lines.append("<hr>")
-        message_lines.append("<p><em>⚠️ Always do your own research before trading!</em></p>")
-        
-        message = "\n".join(message_lines)
-        
-        print(f"📧 Sending complete portfolio RSI status via email...")
-        self.email_sender.send_email(subject, message)
-
-class IPOChecker:
-    def __init__(self, email_sender=None):
-        self.email_sender = email_sender
-    
-    def fetch_ipo_data(self) -> Dict[str, Any]:
-        """
-        Fetch IPO data from Nepali Paisa API
-        Returns the JSON response from the API
-        """
-        url = "https://nepalipaisa.com/api/GetIpos"
-        
-        # Parameters from the curl command
-        params = {
-            'stockSymbol': '',
-            'pageNo': 1,
-            'itemsPerPage': 10,
-            'pagePerDisplay': 5,
-            '_': int(datetime.now().timestamp() * 1000)  # current timestamp
-        }
-        
-        # Headers from the curl command
-        headers = {
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Accept-Language': 'en-US,en;q=0.9,ne;q=0.8',
-            'Connection': 'keep-alive',
-            'Content-Type': 'application/json; charset=utf-8',
-            'Referer': 'https://nepalipaisa.com/ipo',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
-            'X-Requested-With': 'XMLHttpRequest',
-            'sec-ch-ua': '"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"macOS"'
-        }
-        
-        try:
-            response = requests.get(url, params=params, headers=headers, timeout=10)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching IPO data: {e}")
-            return {}
-        except json.JSONDecodeError as e:
-            print(f"Error parsing JSON response: {e}")
-            return {}
-
-    def is_ipo_open(self, ipo: Dict[str, Any]) -> bool:
-        """
-        Check if an IPO is currently open for application
-        This function checks various status fields to determine if IPO is open
-        """
-        # Check the status field directly
-        if 'status' in ipo:
-            status = str(ipo['status']).lower()
-            if 'open' in status:
-                return True
-            elif any(keyword in status for keyword in ['closed', 'end', 'completed', 'finished']):
-                return False
-        
-        # Check date-based opening/closing using the actual API field names
-        current_date = datetime.now()
-        
-        open_date = None
-        close_date = None
-        
-        # Parse opening date
-        if 'openingDateAD' in ipo and ipo['openingDateAD']:
-            try:
-                open_date = datetime.strptime(ipo['openingDateAD'], '%Y-%m-%d')
-            except (ValueError, TypeError):
-                pass
-        
-        # Parse closing date
-        if 'closingDateAD' in ipo and ipo['closingDateAD']:
-            try:
-                close_date = datetime.strptime(ipo['closingDateAD'], '%Y-%m-%d')
-            except (ValueError, TypeError):
-                pass
-        
-        # If we have both dates, check if current date is between them
-        if open_date and close_date:
-            return open_date <= current_date <= close_date
-        
-        # If no clear indicators, return False (better to be conservative)
-        return False
-
-    def format_ipo_for_email(self, ipo: Dict[str, Any]) -> str:
-        """
-        Format IPO details for email message
-        """
-        message_lines = ["<h2>🎯 Open IPO Alert!</h2>", "<hr>"]
-        message_lines.append(f"<h3>🏢 Company: {ipo.get('companyName', 'Unknown Company')}</h3>")
-        message_lines.append(f"<p><strong>📈 Symbol:</strong> {ipo.get('stockSymbol', 'N/A')}</p>")
-        message_lines.append(f"<p><strong>🏭 Sector:</strong> {ipo.get('sectorName', 'N/A')}</p>")
-        message_lines.append(f"<p><strong>💰 Price per Unit:</strong> Rs. {ipo.get('pricePerUnit', 'N/A')}</p>")
-        message_lines.append(f"<p><strong>📊 Min Units:</strong> {ipo.get('minUnits', 'N/A')}</p>")
-        message_lines.append(f"<p><strong>📊 Max Units:</strong> {ipo.get('maxUnits', 'N/A')}</p>")
-        message_lines.append(f"<p><strong>💼 Total Amount:</strong> Rs. {ipo.get('totalAmount', 'N/A')}</p>")
-        message_lines.append(f"<p><strong>📅 Opens:</strong> {ipo.get('openingDateAD', 'N/A')}</p>")
-        message_lines.append(f"<p><strong>📅 Closes:</strong> {ipo.get('closingDateAD', 'N/A')}</p>")
-        message_lines.append(f"<p><strong>🏛️ Registrar:</strong> {ipo.get('shareRegistrar', 'N/A')}</p>")
-        if ipo.get('rating'):
-            message_lines.append(f"<p><strong>⭐ Rating:</strong> {ipo.get('rating')}</p>")
-        message_lines.append("<hr>")
-        message_lines.append("<p><em>💡 Don't miss this investment opportunity!</em></p>")
-        
-        return "\n".join(message_lines)
-
-    async def check_and_notify_ipos(self):
-        """
-        Check for open IPOs and send email notifications
-        """
-        print("\n🔍 Checking for open IPOs...")
-        print("=" * 60)
-        
-        data = self.fetch_ipo_data()
-        
-        if not data:
-            print("❌ Failed to fetch IPO data or received empty response.")
-            return
-        
-        # Parse IPO data from API response
-        ipos = []
-        if isinstance(data, dict):
-            if 'result' in data and isinstance(data['result'], dict) and 'data' in data['result']:
-                ipos = data['result']['data'] if isinstance(data['result']['data'], list) else []
-            elif 'data' in data:
-                ipos = data['data'] if isinstance(data['data'], list) else [data['data']]
-            elif 'ipos' in data:
-                ipos = data['ipos'] if isinstance(data['ipos'], list) else [data['ipos']]
-            else:
-                ipos = [data]
-        elif isinstance(data, list):
-            ipos = data
-        
-        if not ipos:
-            print("❌ No IPO data found in the response.")
-            return
-        
-        # Filter for open IPOs
-        open_ipos = [ipo for ipo in ipos if self.is_ipo_open(ipo)]
-        
-        if open_ipos:
-            print(f"🎯 Found {len(open_ipos)} open IPO(s)!")
-            
-            # Send email notifications for each open IPO
-            if self.email_sender:
-                for ipo in open_ipos:
-                    subject = f"🎯 Open IPO Alert: {ipo.get('companyName', 'Unknown')}"
-                    message = self.format_ipo_for_email(ipo)
-                    print(f"📧 Sending IPO alert for {ipo.get('companyName', 'Unknown')}...")
-                    self.email_sender.send_email(subject, message)
-            
-            # Display details in console
-            for i, ipo in enumerate(open_ipos, 1):
-                print(f"\n📋 Open IPO #{i}:")
-                print(f"   Company: {ipo.get('companyName', 'Unknown')}")
-                print(f"   Symbol: {ipo.get('stockSymbol', 'N/A')}")
-                print(f"   Price: Rs. {ipo.get('pricePerUnit', 'N/A')}")
-                print(f"   Closes: {ipo.get('closingDateAD', 'N/A')}")
-                
-        else:
-            print("✅ No open IPOs found at the moment.")
-            print(f"📊 Total IPOs checked: {len(ipos)}")
-            
-            # Show recent IPOs for reference
-            if ipos:
-                print("\n📋 Recent IPOs:")
-                for i, ipo in enumerate(ipos[:3], 1):
-                    print(f"   {i}. {ipo.get('companyName', 'Unknown')} ({ipo.get('stockSymbol', 'N/A')}): {ipo.get('status', 'Status unknown')}")
 
 def fetch_cookies_and_csrf_token(url, headers):
     """Fetch cookies and CSRF token from the given URL."""
@@ -758,45 +413,6 @@ def calculate_macd(data, short_window=12, long_window=26, signal_window=9):
 
     return data
 
-def calculate_rsi_for_general_stocks(data, period=14):
-    """
-    Calculate RSI using Wilder's smoothing method for general stocks
-    This matches the RSI calculation used for portfolio stocks
-    """
-    close_prices = data['close'].copy()
-    
-    # Calculate price changes
-    delta = close_prices.diff()
-    
-    # Separate gains and losses
-    gains = delta.where(delta > 0, 0)
-    losses = -delta.where(delta < 0, 0)
-    
-    # Calculate the first averages using simple moving average
-    avg_gain = gains.rolling(window=period).mean()
-    avg_loss = losses.rolling(window=period).mean()
-    
-    # Apply Wilder's smoothing for subsequent values
-    for i in range(period, len(gains)):
-        avg_gain.iloc[i] = (avg_gain.iloc[i-1] * (period - 1) + gains.iloc[i]) / period
-        avg_loss.iloc[i] = (avg_loss.iloc[i-1] * (period - 1) + losses.iloc[i]) / period
-    
-    # Calculate RS and RSI
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    
-    return rsi
-
-def get_rsi_status_emoji(rsi_value):
-    """Get RSI status and emoji based on RSI value"""
-    if rsi_value < RSI_OVERSOLD_THRESHOLD:
-        return "OVERSOLD", "🟢"
-    elif rsi_value > RSI_OVERBOUGHT_THRESHOLD:
-        return "OVERBOUGHT", "🔴"
-    else:
-        return "NEUTRAL", "⚪"
-
-
 async def detect_intersections(data, company_symbol, signal_date, email_sender):
     """Detect MACD crossovers and print signals (MACD only)."""
     intersections = []
@@ -838,12 +454,11 @@ async def detect_intersections(data, company_symbol, signal_date, email_sender):
     return intersections, signals_found
 
 
-async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=None):
-    """Send a summary email with MACD signals and optional IPO alerts (no RSI)."""
+async def send_summary_email(all_signals, email_sender, signal_date):
+    """Send a summary email with MACD signals only."""
     has_signals = all_signals and len(all_signals) > 0
-    has_ipos = ipo_alerts and len(ipo_alerts) > 0
     
-    if not has_signals and not has_ipos:
+    if not has_signals:
         return
     
     # Count signals by type
@@ -879,100 +494,37 @@ async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=
                 message_lines.append(f"<p><strong>{signal['stock_symbol']}</strong>: ₹{price_text}</p>")
             message_lines.append("<hr>")
 
-    if has_ipos:
-        message_lines.extend([
-            f"<h2>🎯 IPO Opportunities</h2>",
-            f"<p><strong>Open IPOs Found:</strong> {len(ipo_alerts)}</p>",
-            "<hr>"
-        ])
-        
-        for ipo in ipo_alerts:
-            message_lines.append(f"<h3>🏢 {ipo.get('companyName', 'Unknown Company')}</h3>")
-            message_lines.append(f"<p><strong>📈 Symbol:</strong> {ipo.get('stockSymbol', 'N/A')}</p>")
-            message_lines.append(f"<p><strong>🏭 Sector:</strong> {ipo.get('sectorName', 'N/A')}</p>")
-            message_lines.append(f"<p><strong>💰 Price per Unit:</strong> Rs. {ipo.get('pricePerUnit', 'N/A')}</p>")
-            message_lines.append(f"<p><strong>📊 Min Units:</strong> {ipo.get('minUnits', 'N/A')}</p>")
-            message_lines.append(f"<p><strong>📊 Max Units:</strong> {ipo.get('maxUnits', 'N/A')}</p>")
-            message_lines.append(f"<p><strong>💼 Total Amount:</strong> Rs. {ipo.get('totalAmount', 'N/A')}</p>")
-            message_lines.append(f"<p><strong>📅 Opens:</strong> {ipo.get('openingDateAD', 'N/A')}</p>")
-            message_lines.append(f"<p><strong>📅 Closes:</strong> {ipo.get('closingDateAD', 'N/A')}</p>")
-            message_lines.append(f"<p><strong>🏛️ Registrar:</strong> {ipo.get('shareRegistrar', 'N/A')}</p>")
-            if ipo.get('rating'):
-                message_lines.append(f"<p><strong>⭐ Rating:</strong> {ipo.get('rating')}</p>")
-            message_lines.append("<hr>")
-    
     message_lines.append("<p><em>⚠️ Always do your own research before trading!</em></p>")
     
     message = "\n".join(message_lines)
     
-    total_items = (
-        (len(all_signals) if all_signals else 0)
-        + (len(ipo_alerts) if ipo_alerts else 0)
-    )
-    print(f"📧 Sending summary email with {total_items} total items...")
+    print(f"📧 Sending summary email with {len(all_signals)} MACD signals...")
     email_sender.send_email(subject, message)
 
 
-async def run_analysis_for_date(signal_date: str):
-    # Group ID finder mode - uncomment to help find your group ID
-    # Set this to True to just get group IDs and exit without running the main program
-    find_group_id_mode = False
-    
-    if find_group_id_mode:
-        bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-        url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
-        
-        try:
-            response = requests.get(url)
-            data = response.json()
-            
-            print("\n==== TELEGRAM GROUP ID FINDER ====")
-            print("Looking for group chats in recent bot messages...")
-            
-            if data["ok"] and data["result"]:
-                for update in data["result"]:
-                    if "message" in update and "chat" in update["message"]:
-                        chat = update["message"]["chat"]
-                        chat_id = chat["id"]
-                        chat_type = chat["type"]
-                        chat_title = chat.get("title", "Private Chat")
-                        
-                        print(f"Found: {chat_title} ({chat_type})")
-                        print(f"ID: {chat_id}")
-                        print("------------------------------")
-            else:
-                print("No messages found. Make sure to:")
-                print("1. Add your bot to the group")
-                print("2. Send a message in the group that mentions the bot")
-                print("3. Run this script again")
-            
-            print("\nTo use this ID, update the tg_group_chat_ids line with your ID")
-            print("==================================\n")
-            return
-        except Exception as e:
-            print(f"Error finding group ID: {str(e)}")
-            return
-
-    
+async def run_analysis_for_date(signal_date: str, fast_mode: bool = False):
     # signal_date is provided by caller (YYYY-MM-DD)
 
     # Initialize email sender using configuration
     email_sender = EmailSender()
     
-    # Set up headers for data fetching
-    base_url = "https://www.sharesansar.com/company/nhpc"
-    headers = {
-        'accept': 'application/json, text/javascript, */*; q=0.01',
-        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'origin': 'https://www.sharesansar.com',
-        'referer': base_url,
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'x-requested-with': 'XMLHttpRequest'
-    }
+    if not fast_mode:
+        # Set up headers for data fetching
+        base_url = "https://www.sharesansar.com/company/nhpc"
+        headers = {
+            'accept': 'application/json, text/javascript, */*; q=0.01',
+            'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'origin': 'https://www.sharesansar.com',
+            'referer': base_url,
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'x-requested-with': 'XMLHttpRequest'
+        }
 
-    # Fetch cookies and CSRF token
-    cookies, csrf_token = fetch_cookies_and_csrf_token(base_url, headers)
-    headers = update_headers(headers, cookies, csrf_token)
+        # Fetch cookies and CSRF token
+        cookies, csrf_token = fetch_cookies_and_csrf_token(base_url, headers)
+        headers = update_headers(headers, cookies, csrf_token)
+    else:
+        print("⚡ Fast mode enabled - skipping data fetching")
 
     print("🚀 Starting MACD Signal Analysis...")
     print("="*60)
@@ -984,6 +536,11 @@ async def run_analysis_for_date(signal_date: str):
         reader = csv.reader(file)
         next(reader)  # Skip header
         stock_list = [row[0] for row in reader]
+
+    # In fast mode, limit to first 10 stocks for faster execution
+    if fast_mode:
+        stock_list = stock_list[:10]
+        print(f"⚡ Fast mode: Processing only first {len(stock_list)} stocks")
 
     # Filter company data
     filtered_data = load_company_data("company_data.json", stock_list)
@@ -1042,8 +599,6 @@ async def run_analysis_for_date(signal_date: str):
     # Filter portfolio signals strictly to the provided signal_date
     portfolio_signals = await portfolio_analyzer.analyze_portfolio_macd_signals(signal_date_filter=signal_date)
     
-    # Skip portfolio RSI checks; MACD-only
-    
     # Display detailed portfolio analysis
     portfolio_analyzer.display_portfolio_analysis()
     
@@ -1054,24 +609,13 @@ async def run_analysis_for_date(signal_date: str):
     if portfolio_signals:
         all_signals.extend(portfolio_signals)
     
-    print("\n" + "="*60)
-    print("PHASE 3: IPO Opportunity Check")
-    print("="*60)
-    
-    # Initialize and run IPO checker
-    ipo_checker = IPOChecker(email_sender)
-    
-    # Check for open IPOs and collect alerts
-    ipo_alerts = await ipo_checker.check_and_notify_ipos()
-    
-    # Send summary email with MACD signals and IPO alerts
-    if (all_signals or ipo_alerts) and email_sender:
-        await send_summary_email(all_signals, email_sender, signal_date, ipo_alerts)
+    # Send summary email with MACD signals only
+    if all_signals and email_sender:
+        await send_summary_email(all_signals, email_sender, signal_date)
     
     print("\n🎉 Complete Analysis Finished!")
     print("✅ MACD signals analyzed and updated in 'my_portfolio.csv'")
-    print("📧 Summary email sent with all signals!")
-    print("🎯 IPO opportunities checked and notified if available!")
+    print("📧 Summary email sent with MACD signals!")
 
 
 async def scheduler_loop():
@@ -1101,10 +645,11 @@ async def scheduler_loop():
 async def main():
     # Mode: schedule daily at 11:00 Asia/Kathmandu, unless ONE_SHOT=1
     one_shot = os.getenv('ONE_SHOT', '0') == '1'
+    fast_mode = os.getenv('FAST_MODE', '0') == '1'  # Enable fast mode for CI/CD
     if one_shot:
         tz = ZoneInfo("Asia/Kathmandu")
         signal_date = (datetime.now(tz) - timedelta(days=1)).strftime('%Y-%m-%d')
-        await run_analysis_for_date(signal_date)
+        await run_analysis_for_date(signal_date, fast_mode=fast_mode)
     else:
         await scheduler_loop()
 
