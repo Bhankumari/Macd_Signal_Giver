@@ -1048,8 +1048,8 @@ async def main():
         company_symbol = company["symbol"].replace('/', '-')
 
         # Fetch and update price history!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # new_data = price_history(headers, company_id)
-        # update_csv(company_symbol, new_data)
+        new_data = price_history(headers, company_id)
+        update_csv(company_symbol, new_data)
 
         # Detect MACD signal code from here
         file_path = f"data/{company_symbol}.csv"
