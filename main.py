@@ -413,9 +413,7 @@ class PortfolioMACDAnalyzer:
                 print(f"❌ Error checking RSI for {stock_symbol}: {str(e)}")
                 self.rsi_alerts[stock_symbol] = "Error"
         
-        # Always send RSI status for all portfolio stocks via email
-        if self.email_sender:
-            await self.send_portfolio_rsi_status()
+        # Do not send RSI status for portfolio via email
     
     async def send_portfolio_rsi_status(self):
         """Always send RSI status for ALL portfolio stocks via email"""
@@ -820,7 +818,7 @@ async def detect_intersections(data, company_symbol, signal_date, email_sender):
             # Sell signal: MACD crosses signal line from above
             intersections.append((data['published_date'].iloc[i], data['macd'].iloc[i], data['signal'].iloc[i], "Sell Signal", i))
 
-    # Print intersection points and signal types with RSI information
+    # Print intersection points and signal types (symbol and price only)
     for date, macd_val, signal_val, signal_type, index in intersections:
         # Define today's date in the same format as the 'date' variable
         today_date = datetime.strptime(f"{signal_date} 00:00:00", "%Y-%m-%d %H:%M:%S")
@@ -829,23 +827,16 @@ async def detect_intersections(data, company_symbol, signal_date, email_sender):
         intersection_date = datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S")
 
         if intersection_date == today_date:
-            # Get RSI value and current price for this signal
-            current_rsi = rsi_data.iloc[index] if not pd.isna(rsi_data.iloc[index]) else 50.0
+            # Get current price for this signal
             current_price = data['close'].iloc[index]
-            
-            # Get RSI status and emoji
-            rsi_status, rsi_emoji = get_rsi_status_emoji(current_rsi)
-            
-            # Enhanced print statement with RSI information
-            print(f"\n\n{signal_type}: {company_symbol} | RSI: {current_rsi:.1f} {rsi_emoji} {rsi_status} | Price: {current_price:.2f} ({intersection_date.strftime('%Y-%m-%d')})")
+
+            # Print only signal type, symbol, and price
+            print(f"\n\n{signal_type}: {company_symbol} | Price: {current_price:.2f} ({intersection_date.strftime('%Y-%m-%d')})")
         
             # Collect signal for batch email
             signals_found.append({
                 'signal_type': signal_type,
                 'stock_symbol': company_symbol,
-                'rsi': current_rsi,
-                'rsi_emoji': rsi_emoji,
-                'rsi_status': rsi_status,
                 'price': current_price,
                 'date': intersection_date.strftime('%Y-%m-%d'),
                 'macd': macd_val,
@@ -856,23 +847,23 @@ async def detect_intersections(data, company_symbol, signal_date, email_sender):
 
 
 async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=None, low_rsi_alerts=None):
-    """Send a summary email with all MACD signals found and IPO alerts"""
+    """Send a summary email listing only MACD signals (symbol and price)."""
     has_signals = all_signals and len(all_signals) > 0
-    has_ipos = ipo_alerts and len(ipo_alerts) > 0
-    has_low_rsi = low_rsi_alerts and len(low_rsi_alerts) > 0
+    has_ipos = False
+    has_low_rsi = False
     
-    if not has_signals and not has_ipos and not has_low_rsi:
+    if not has_signals:
         return
     
     # Count signals by type
     buy_signals = [s for s in all_signals if s['signal_type'] == 'Buy Signal']
     sell_signals = [s for s in all_signals if s['signal_type'] == 'Sell Signal']
     
-    subject = f"📊 Market Analysis Summary - {signal_date}"
+    subject = f"📊 MACD Crossover Summary - {signal_date}"
     
     # Create summary message
     message_lines = [
-        f"<h1>📊 Market Analysis Summary Report</h1>",
+        f"<h1>📊 MACD Crossover Report</h1>",
         f"<p><strong>Date:</strong> {signal_date}</p>",
         "<hr>"
     ]
@@ -890,20 +881,14 @@ async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=
             message_lines.append("<h3>🟢 Buy Signals</h3>")
             for signal in buy_signals:
                 message_lines.append(f"<h4>📈 {signal['stock_symbol']}</h4>")
-                message_lines.append(f"<p><strong>RSI:</strong> {signal['rsi']:.1f} {signal['rsi_emoji']} {signal['rsi_status']}</p>")
                 message_lines.append(f"<p><strong>Price:</strong> {signal['price']:.2f}</p>")
-                message_lines.append(f"<p><strong>MACD:</strong> {signal['macd']:.4f}</p>")
-                message_lines.append(f"<p><strong>Signal Line:</strong> {signal['signal']:.4f}</p>")
                 message_lines.append("<hr>")
         
         if sell_signals:
             message_lines.append("<h3>🔴 Sell Signals</h3>")
             for signal in sell_signals:
                 message_lines.append(f"<h4>📉 {signal['stock_symbol']}</h4>")
-                message_lines.append(f"<p><strong>RSI:</strong> {signal['rsi']:.1f} {signal['rsi_emoji']} {signal['rsi_status']}</p>")
                 message_lines.append(f"<p><strong>Price:</strong> {signal['price']:.2f}</p>")
-                message_lines.append(f"<p><strong>MACD:</strong> {signal['macd']:.4f}</p>")
-                message_lines.append(f"<p><strong>Signal Line:</strong> {signal['signal']:.4f}</p>")
                 message_lines.append("<hr>")
     
     if has_low_rsi:
@@ -945,8 +930,6 @@ async def send_summary_email(all_signals, email_sender, signal_date, ipo_alerts=
     
     total_items = (
         (len(all_signals) if all_signals else 0)
-        + (len(ipo_alerts) if ipo_alerts else 0)
-        + (len(low_rsi_alerts) if low_rsi_alerts else 0)
     )
     print(f"📧 Sending summary email with {total_items} total items...")
     email_sender.send_email(subject, message)
@@ -1126,3 +1109,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
