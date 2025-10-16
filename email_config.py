@@ -21,7 +21,6 @@ RECIPIENT_EMAIL = "balaramlamsal137@gmail.com"
 # Keep RECIPIENT_EMAIL for backward compatibility.
 RECIPIENT_EMAILS = [
     "balaramlamsal137@gmail.com",
-    "punarkarki9@gmail.com",
 ]
 
 # SMTP Server Settings
@@ -95,7 +94,7 @@ EMAIL_TEMPLATES = {
 }
 
 # Portfolio Stocks
-PORTFOLIO_STOCKS = ['CFCL', 'JFL', 'PFL', 'ICFC', 'JFL', 'BFC']
+PORTFOLIO_STOCKS = ['CFCL', 'PFL', 'JFL',]
 
 # RSI Thresholds
 RSI_OVERSOLD_THRESHOLD = 30
